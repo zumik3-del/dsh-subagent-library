@@ -7,5 +7,5 @@ node_modules/
 settings.json
 key.bin
 coverage/
-# 交接文档含本机路径与审查记录，绝不随公开仓库发布（lib/ 需提交入库，勿忽略）
+# Handoff docs carry local paths and review records: never publish them. `lib/` stays tracked — do not ignore it.
 HANDOFF.md

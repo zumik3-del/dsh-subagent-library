@@ -21,7 +21,7 @@ Order before handoff: `pnpm install --frozen-lockfile` (once) → `typecheck` �
 
 ## 4. Code conventions
 
-- English in code, comments, roster YAML, commits, locale keys; UI copy via [locale/en.json](locale/en.json) + [locale/zh.json](locale/zh.json).
+- **English only, project-wide**: code, comments, commits, roster YAML, UI copy and every doc ([README.md](README.md), [CHANGELOG.md](CHANGELOG.md), [MIGRATION.md](MIGRATION.md), [RELEASING.md](RELEASING.md), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)) — no bilingual mirrors, no Chinese sections. The one exception is shipped product localization: [locale/zh.json](locale/zh.json) plus the `zh` dictionary in [src/client/locales.ts](src/client/locales.ts); English UI copy lives in [locale/en.json](locale/en.json).
 - Style: no semicolons, single quotes, 2-space indent, named exports, small single-purpose modules. No linter/formatter — keep diffs consistent by hand.
 - Roster shape is a contract: additive changes only, 0.2.x/0.3.x docs keep loading, inline fallback stays read-only. Comment the *why* (invariants, fixes), not the *what*.
 

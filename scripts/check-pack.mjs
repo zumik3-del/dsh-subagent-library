@@ -59,7 +59,6 @@ const expected = [
   'CHANGELOG.md',
   'LICENSE',
   'MIGRATION.md',
-  'README.en.md',
   'README.md',
   'THIRD_PARTY_NOTICES.md',
   'assets/readme/hero.svg',

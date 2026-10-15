@@ -1,130 +1,100 @@
-# 更新日志 / Changelog
-
-本文件记录 dsh-subagent-library 的面向用户的重要变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+# Changelog
 
 This file documents user-facing changes. Format loosely follows [Keep a Changelog]; versions follow [SemVer].
 
 ## [0.3.5] — 2026-10-15
 
-### 修复 / Fixed
+### Fixed
 
-- **适配 DSH 0.2.1-alpha.2 的子代理派发缝**：新宿主移除了 `ctx.subagents.start` 与 `startContinuable`，改为单一 `startActivation`（后端由 provider 自己决定，`delivery` 只决定是否同时通知父会话）。插件现在**运行时结构探测两代宿主**：≥0.2.1 走激活缝（continuable 条目 `delivery: 'parent'`；前台与后台条目 `delivery: 'caller'`，由插件自己收敛结果，取消时 dispose 激活），≤0.2.0 保持原有 `start`/`startContinuable` 通道。名册、两个工具与设置页在两代宿主上行为一致；0.3.5 之前在这些新宿主上委派会以 `ctx.subagents.startContinuable is not a function` 失败。
-  - **Adapts delegation to the DSH 0.2.1-alpha.2 subagent seam**: the new host removed `ctx.subagents.start` / `startContinuable` in favor of one `startActivation` call (the provider picks the backend; `delivery` only decides whether the parent is also notified). The plugin now detects the host generation structurally at runtime: ≥0.2.1 uses the activation seam (a continuable entry with `delivery: 'parent'`; foreground and background entries with `delivery: 'caller'`, the plugin settling the result itself and disposing the activation on cancellation), while ≤0.2.0 keeps the original `start`/`startContinuable` channel. Roster, both tools and Settings behave identically on either generation. Before 0.3.5, delegation on these hosts failed with `ctx.subagents.startContinuable is not a function`.
-- 后台一次性委派在激活缝上把任务所有者登记为**会话 id**（`exec.agent.id`，与 dsh-tool-bash / dsh-tool-terminal 一致）；旧宿主仍沿用 Agent 对象。
-  - A background one-shot delegation now registers its job owner as the SESSION ID (`exec.agent.id`, matching dsh-tool-bash / dsh-tool-terminal) on the activation seam; the legacy host keeps receiving the Agent object.
+- **Adapts delegation to the DSH 0.2.1-alpha.2 subagent seam**: the new host removed `ctx.subagents.start` / `startContinuable` in favor of one `startActivation` call (the provider picks the backend; `delivery` only decides whether the parent is also notified). The plugin now detects the host generation structurally at runtime: ≥0.2.1 uses the activation seam (a continuable entry with `delivery: 'parent'`; foreground and background entries with `delivery: 'caller'`, the plugin settling the result itself and disposing the activation on cancellation), while ≤0.2.0 keeps the original `start`/`startContinuable` channel. Roster, both tools and Settings behave identically on either generation. Before 0.3.5, delegation on these hosts failed with `ctx.subagents.startContinuable is not a function`.
+- A background one-shot delegation now registers its job owner as the SESSION ID (`exec.agent.id`, matching dsh-tool-bash / dsh-tool-terminal) on the activation seam; the legacy host keeps receiving the Agent object.
+
+### Docs
+
+- **The project is English-only now.** `README.md`, `CHANGELOG.md`, `MIGRATION.md` and `THIRD_PARTY_NOTICES.md` lost their Chinese halves, and the `README.en.md` mirror is gone — `README.md` is the English document (the shipped Chinese *UI* locale is unaffected). `AGENTS.md` §4 records the rule for future changes.
 
 ## [0.3.4] — 2026-10-14
 
-### 修复 / Fixed
+### Fixed
 
-- 读取名册失败（目录不可读、单文件不可读、YAML 损坏）不会删除任何 profile 的路由覆盖。只有目录列出成功、并且复查确认共享文件确实不存在时，才清理对应覆盖；设置页明确删除仍会清理。
-  - A failed roster read (unreadable directory, unreadable file, or broken YAML) does not delete any profile's route overlay. Overlays are removed on read only after a successful listing and a confirmed ENOENT re-check; an explicit settings delete still cleans them.
-- **desktop 与 web 不再共用对方的模型路由**。名册文件仍在 `~/.dsh/subagents/`（角色、提示词、工具范围继续共享），但 `provider` / `model` 按当前 profile 解析：本 profile 没注册的 provider 不再拿去调用，子代理改用本会话的模型；在设置页相对当前显示改过的路由才写到 `_profiles/<profile>/<id>.yaml`。只改描述、或保存时回显被隐藏的外端路由，不会写成 `inherit`，之后本 profile 注册了该 provider 仍会用共享路由。不会改写另一个 profile 的路由。
-  - Desktop and web no longer call each other's model routes. Roster files stay in `~/.dsh/subagents/` (role, persona, and tool scope remain shared), but `provider` / `model` resolve against the current profile. A provider that is not registered here is not sent; the child inherits this session's model. Only a route the user changed relative to what this profile displayed is stored in `_profiles/<profile>/<id>.yaml`. Saving a description, or echoing a hidden foreign route, does not pin `inherit`, so a later registration of that provider still uses the shared route. It does not overwrite the other profile's route.
+- A failed roster read (unreadable directory, unreadable file, or broken YAML) does not delete any profile's route overlay. Overlays are removed on read only after a successful listing and a confirmed ENOENT re-check; an explicit settings delete still cleans them.
+- Desktop and web no longer call each other's model routes. Roster files stay in `~/.dsh/subagents/` (role, persona, and tool scope remain shared), but `provider` / `model` resolve against the current profile. A provider that is not registered here is not sent; the child inherits this session's model. Only a route the user changed relative to what this profile displayed is stored in `_profiles/<profile>/<id>.yaml`. Saving a description, or echoing a hidden foreign route, does not pin `inherit`, so a later registration of that provider still uses the shared route. It does not overwrite the other profile's route.
 
 ## [0.3.3] — 2026-10-09
 
-### 变更 / Changed
+### Changed
 
-- **设置页重做为分层折叠卡片**：名称与启用开关、角色描述、模型与 Provider、执行标签各自排布；长名称和路由自动换行，描述最多展示两行，不再与标签争抢宽度。展开后字段按「概述 / 路由与执行 / 工具与提示词」分组，宽面板两列、窄面板单列。
-  - **Reworked Settings as layered, collapsible cards**: identity and enable state, description, model/provider, and execution tags each have their own space. Long names and routes wrap; descriptions show up to two lines without competing with tags. The grouped editor uses two columns in wide panels and one in narrow panels.
-- 设置页新增顶部摘要带（条目 / 启用 / 已停用 / 未保存计数 + 名册目录）、筛选框（匹配 id、描述、模型…）、全部展开 / 收起，以及新增条目的折叠卡。
-  - Added a summary band (entry / enabled / disabled / unsaved counts + roster directory), a filter box (matches id, description, model…), expand/collapse all, and a collapsed add-entry card.
-- 切换启用状态后，折叠卡片直接显示「未保存 / 还原 / 保存修改」；保存后生效，其他条目的未保存草稿继续保留。停用条目排在列表末尾。
-  - Toggling enable state exposes an unsaved badge and Revert / Save changes directly on the collapsed card. Changes take effect on save and other drafts are preserved; disabled entries appear last.
-- 界面使用宿主 `--dsw-alias-*` 主题变量并提供回退；统一间距、字号与标签样式，存储和备份说明移入页尾折叠区。
-  - Host theme tokens with fallbacks support light/dark modes; spacing, typography and tags are consistent, with storage and backup details in a footer disclosure.
-- 字段校验失败时自动展开出错的那一行，便于定位。
-  - A failed field validation now opens the offending row so the problem is visible.
-- 折叠按钮与启用开关使用独立原生控件，补齐字段标签与键盘焦点提示；修复「还原」无法移除新加可选字段的问题。
-  - Separate native disclosure and switch controls improve keyboard operation and field labeling. Revert now removes newly added optional fields.
-- 本次变化限于设置页展示与交互：名册 YAML、委派、迁移、存储位置与 API 均未改动。
-  - Changes are confined to Settings presentation and interaction: roster YAML, delegation, migration, storage location, and the API are unchanged.
+- **Reworked Settings as layered, collapsible cards**: identity and enable state, description, model/provider, and execution tags each have their own space. Long names and routes wrap; descriptions show up to two lines without competing with tags. The grouped editor uses two columns in wide panels and one in narrow panels.
+- Added a summary band (entry / enabled / disabled / unsaved counts + roster directory), a filter box (matches id, description, model…), expand/collapse all, and a collapsed add-entry card.
+- Toggling enable state exposes an unsaved badge and Revert / Save changes directly on the collapsed card. Changes take effect on save and other drafts are preserved; disabled entries appear last.
+- Host theme tokens with fallbacks support light/dark modes; spacing, typography and tags are consistent, with storage and backup details in a footer disclosure.
+- A failed field validation now opens the offending row so the problem is visible.
+- Separate native disclosure and switch controls improve keyboard operation and field labeling. Revert now removes newly added optional fields.
+- Changes are confined to Settings presentation and interaction: roster YAML, delegation, migration, storage location, and the API are unchanged.
 
 ## [0.3.2] — 2026-10-04
 
-### 变更 / Changed
+### Changed
 
-- 插件列表和详情页新增随 DeepSeek Harness 界面语言切换的中英文名称与简介。
-  - Added localized English and Chinese names and descriptions for the plugin list and detail page.
-- 仅修改展示元数据；YAML 名册、委派、迁移和设置页行为不变。
-  - Display metadata only; YAML roster, delegation, migration, and Settings behavior are unchanged.
+- Added localized English and Chinese names and descriptions for the plugin list and detail page.
+- Display metadata only; YAML roster, delegation, migration, and Settings behavior are unchanged.
 
-## [0.3.1] — 2026-09-29（DSH 0.1.7-rc.2 适配）
+## [0.3.1] — 2026-09-29 (DSH 0.1.7-rc.2 adaptation)
 
-### 修复 / Fixed
+### Fixed
 
-- **适配 DSH 0.1.7-rc.2**：0.3.0 的旧设置 seam 在新宿主上调用不存在的 `register()`，因此插件启动失败并返回整体 503；这不是由 bundle 中的 `settingsNamespace` 命名导入直接造成的。插件现在**运行时结构探测两代宿主**：≤0.1.6 走原 `register()` 通道；≥0.1.7 直接使用 Loader 活配置，旧条目兜底的清除改经官方 `ctx.configEditor` 通道。名册文件（`~/.dsh/subagents/*.yaml`）在两代宿主上行为一致。
-  - Adapts to DSH 0.1.7-rc.2: 0.3.0's legacy settings seam called `register()`, which the new host does not provide, so startup failed with an overall 503; the direct cause was not a named `settingsNamespace` import from the bundle. The plugin now detects the host generation at runtime: ≤0.1.6 keeps the `register()` channel; ≥0.1.7 uses the Loader live config plus the official `ctx.configEditor` for legacy cleanup. Roster files behave identically on both.
-- `.yml` 条目收敛死锁修复：内容未变的 `.yml` 条目此前会因跳过写入而永远保持双文件冲突；现在非规范后缀行即使内容未变也会收敛为 `.yaml`，原 `.yml` 的手写注释会丢失。
-  - Fixed a convergence deadlock for unchanged `.yml` rows: they now converge to generated `.yaml` even when their content is unchanged, losing hand-written comments from the `.yml` file.
-- 收敛写入失败现在明确返回 HTTP 500（可能已经部分完成）；规范 `.yaml` 的跳过路径若残留 `.yml` 清扫失败，则返回 200 并带 warning，故障解除后可重试收敛。
-  - Convergence failures now return HTTP 500 and may be partial; a failed `.yml` sweep on the canonical `.yaml` skip path returns 200 with a warning and can be retried after the fault clears.
-- 修复本次未发布适配候选引入的旧宿主（≤0.1.6）回归：`describe()` 恢复方法调用形态（detached 调用会因 `this` 丢失被吞错，导致 legacyCount 误报 0、清除假成功）。
-  - Fixed a legacy-host regression introduced in this unreleased compatibility candidate: `describe()` retains its receiver, preventing swallowed errors, a false zero legacy count, and cleanup that reports success without removing legacy copies.
-- 修复本次未发布适配候选中暴露的 SUB-COMPAT-017-004：ConfigEditor 的 raw 配置不含 schema 默认值，整表 reconcile 会丢掉默认 provider（如 `spawn`），清除旧条目后委派报 "provider not registered"；现在 reconcile 按配置定义的字段恢复默认值（默认值只进活配置实例，绝不写回 raw patch），并在编辑完成后立即反射到当前实例。
-  - Fixed SUB-COMPAT-017-004 exposed by this unreleased compatibility candidate: the raw ConfigEditor layer carries no schema defaults, so a wholesale reconcile dropped the default provider (delegation then failed with "provider not registered"); reconcile now restores defaults for the fields defined by the configuration into the live instance only (never the raw patch) and reflects the result immediately after the edit.
+- Adapts to DSH 0.1.7-rc.2: 0.3.0's legacy settings seam called `register()`, which the new host does not provide, so startup failed with an overall 503; the direct cause was not a named `settingsNamespace` import from the bundle. The plugin now detects the host generation at runtime: ≤0.1.6 keeps the `register()` channel; ≥0.1.7 uses the Loader live config plus the official `ctx.configEditor` for legacy cleanup. Roster files behave identically on both.
+- Fixed a convergence deadlock for unchanged `.yml` rows: they now converge to generated `.yaml` even when their content is unchanged, losing hand-written comments from the `.yml` file.
+- Convergence failures now return HTTP 500 and may be partial; a failed `.yml` sweep on the canonical `.yaml` skip path returns 200 with a warning and can be retried after the fault clears.
+- Fixed a legacy-host regression introduced in this unreleased compatibility candidate: `describe()` retains its receiver, preventing swallowed errors, a false zero legacy count, and cleanup that reports success without removing legacy copies.
+- Fixed SUB-COMPAT-017-004 exposed by this unreleased compatibility candidate: the raw ConfigEditor layer carries no schema defaults, so a wholesale reconcile dropped the default provider (delegation then failed with "provider not registered"); reconcile now restores defaults for the fields defined by the configuration into the live instance only (never the raw patch) and reflects the result immediately after the edit.
 
-### 文档 / Docs
+### Docs
 
-- 配置位置与回滚说明按宿主版本分述（≥0.1.7 的插件级配置在 profile `cordis.patch.yml`；0.2.8 仅适用于旧宿主，宿主降级及 `settings.yaml.imported` 恢复路径未经验证，不提供降级操作步骤）。
-  - Config-location and rollback docs now distinguish host versions: 0.2.8 requires an older host; host downgrade and `settings.yaml.imported` restoration are unverified, so no downgrade sequence is prescribed.
+- Config-location and rollback docs now distinguish host versions: 0.2.8 requires an older host; host downgrade and `settings.yaml.imported` restoration are unverified, so no downgrade sequence is prescribed.
 
 ## [0.3.0] — 2026-09-24
 
-### 变更 / Changed（重要：存储位置变化）
+### Changed (important: storage location changed)
 
-- **名册存储目录化**：具名子代理从 `settings.yaml` 的 `subagent-library.entries` 迁移为 **一个子代理一个 YAML 文件**，默认目录 `~/.dsh/subagents/`（可用 `subagent-library.entriesDir` 自定义，支持 `~` 与相对路径）。
-  - **The roster now lives as one YAML file per named subagent** (default `~/.dsh/subagents/`), replacing the inline `entries` map in settings.yaml.
-- **旧条目自动迁移**：升级后首次使用名册时，settings 里的旧 `entries` 会被**逐条**导出为 `<id>.yaml`（已存在同名文件绝不覆盖；重复重启幂等）。settings 中的旧副本**保留**作回滚兜底，文件优先生效；0.3.x 内旧配置仍可读，**0.4 起停止读取**。
-  - On first use the legacy `entries` are exported entry-by-entry (never overwriting hand-written files); the legacy copies are kept as a rollback fallback and win nothing — files take precedence. Legacy reading is removed in 0.4.
-- **一键清除旧条目**：设置页「子代理库」卡片新增迁移横幅与「清除旧条目」按钮（只清除已被文件覆盖的旧副本，不碰名册文件）；也可手动删除 settings 中的旧 `entries` 段。详见 [MIGRATION.md](./MIGRATION.md)。
-  - The settings page gains a migration banner with a one-click "clear legacy copies" action. See [MIGRATION.md](./MIGRATION.md).
-- 设置页 UI 重排：对齐个性化指令编辑器的视觉风格（主题中性 rgba 配色、8px 圆角卡片、蓝色主操作/红色危险按钮、tinted 横幅、chip 徽标），整卡加宽至 860px；**角色提示词编辑区按内容自适应高度**（110–440px 夹紧，短文本紧凑、长文本展开），描述/persona 等正文字段换回界面字体并加大字号，长文本可读性优先；描述字段为单行 textarea 可拖展；后台模式挪至思考强度行，固定宽度控件不再被挤压。
-  - Settings-page restyle: aligned with the personal-instruction editor (theme-neutral rgba palette, 8px rounded cards, blue primary / red danger buttons, tinted banners, chip badges), card widened to 860px; the persona textarea auto-sizes to its content (clamped 110-440px); description/persona body text is back to the UI face at a larger size; the description field is a one-line textarea you can drag taller; background mode moved next to reasoning effort so fixed-width controls stop getting squeezed.
+- **The roster now lives as one YAML file per named subagent** (default `~/.dsh/subagents/`), replacing the inline `entries` map in settings.yaml.
+- On first use the legacy `entries` are exported entry-by-entry (never overwriting hand-written files); the legacy copies are kept as a rollback fallback and win nothing — files take precedence. Legacy reading is removed in 0.4.
+- The settings page gains a migration banner with a one-click "clear legacy copies" action. See [MIGRATION.md](./MIGRATION.md).
+- Settings-page restyle: aligned with the personal-instruction editor (theme-neutral rgba palette, 8px rounded cards, blue primary / red danger buttons, tinted banners, chip badges), card widened to 860px; the persona textarea auto-sizes to its content (clamped 110-440px); description/persona body text is back to the UI face at a larger size; the description field is a one-line textarea you can drag taller; background mode moved next to reasoning effort so fixed-width controls stop getting squeezed.
 
-### 新增 / Added
+### Added
 
-- **`reasoningEffort` 条目字段**：为单个具名子代理指定思考强度（adapter 自有值，如 `max` / `high` / `medium` / `low`；留空随父会话默认）。走官方 `agentOptions.reasoningEffort` 覆盖通道；子代理换了模型路由时，官方会自动丢弃继承来的思考强度，因此未显式设置不会跨模型泄漏。
-  - New per-entry `reasoningEffort` field (adapter-owned id, e.g. `max`), passed through the official `agentOptions.reasoningEffort` override; inherited efforts are auto-dropped by the harness when the child's route differs.
-- **`enabled` 条目字段**：文件内写 `enabled: false` 停用条目——目录与设置页仍可见，`delegate` 明确拒绝；设置页提供启用开关。
-  - New `enabled` flag to disable an entry without deleting its file.
-- **坏文件不炸名册**：解析/校验失败、`.yaml`/`.yml` 同 id 冲突、大写文件名等一律跳过并以 diagnostics 呈现在 `list_subagents`、`/subagent` 与设置页。
-  - Broken roster files are skipped and surfaced as diagnostics instead of breaking the roster.
-- 设置页：迁移横幅、legacy 徽标、diagnostics 面板；409 冲突保留未保存草稿，仅切换到最新基线（响应带回新视图），再次保存即为覆盖。
-  - Settings page: migration banner, legacy badge, diagnostics panel; a 409 conflict keeps your unsaved draft and only switches to the latest baseline (the response carries the fresh view) — saving again overwrites.
-- 名册目录新增 **`_backups/` 备份约定**：插件不做自动备份，按惯例 agent/人在改条目前把原文件复制进 `_backups/`；`_` 前缀的文件/目录（`_backups/`、`_draft.yaml`…）一律视为非名册内容，**静默忽略**（不再产生诊断噪音）。
-  - Roster-directory `_backups/` convention: the plugin never auto-backs up — by convention, agents (or humans) copy the original file into `_backups/` before editing; anything `_`-prefixed (files or directories) is treated as non-roster content and silently ignored (no more diagnostic noise).
+- New per-entry `reasoningEffort` field (adapter-owned id, e.g. `max`), passed through the official `agentOptions.reasoningEffort` override; inherited efforts are auto-dropped by the harness when the child's route differs.
+- New `enabled` flag to disable an entry without deleting its file.
+- Broken roster files are skipped and surfaced as diagnostics instead of breaking the roster.
+- Settings page: migration banner, legacy badge, diagnostics panel; a 409 conflict keeps your unsaved draft and only switches to the latest baseline (the response carries the fresh view) — saving again overwrites.
+- Roster-directory `_backups/` convention: the plugin never auto-backs up — by convention, agents (or humans) copy the original file into `_backups/` before editing; anything `_`-prefixed (files or directories) is treated as non-roster content and silently ignored (no more diagnostic noise).
 
-### 修复 / Fixed
+### Fixed
 
-- **`.yml` 名册生命周期修复**：名册同时读取 `.yaml`/`.yml`；设置页保存有变化的条目统一收敛为 `<id>.yaml` 并移除同 id 的 `.yml`，删除条目同时清理两个后缀，避免删除 `.yaml` 后旧 `.yml` 复活。
-  - **`.yml` roster lifecycle fixed**: the roster reads both `.yaml` and `.yml`; saving changed content through the settings page converges to `<id>.yaml` and removes the same-id `.yml`; deleting an entry removes both suffixes, preventing an old `.yml` from resurrecting after `.yaml` is deleted.
-- **修复设置页保存/删除的 HTTP 重复响应**：补齐分支返回，确保 delete/save 每次只发送一次 HTTP 响应，避免真实服务触发 `ERR_HTTP_HEADERS_SENT`。
-  - **Duplicate HTTP responses fixed**: delete/save handlers now return after sending their response, so each request is answered exactly once and the real server avoids `ERR_HTTP_HEADERS_SENT`.
-- **双审加固（K3 实现复审 + GLM 红队）**：设置页保存**跳过内容未变的条目**——不再把未触碰的手写 YAML 文件重写为生成格式（手写注释得以保留）；名册文件损坏且存在同名 legacy 副本时，升级为 **error 级诊断**并明确提示「delegate 使用的是旧配置」（不再静默回退）；409 冲突**保留用户未保存的草稿**（只切换到最新基线，再次保存才会覆盖）；迁移失败（整体或单条）**自动重试**而非进程内永久搁浅；`reasoningEffort` 保存时校验为 effort id 形态（字母数字与 `._-`）；设置页只读时「清除旧条目」响亮 403 而非假成功；客户端补齐 wire 契约测试（parseView 此前丢失 legacyCount 导致迁移横幅不渲染的 bug 即在此层）。
-  - Dual-review hardening (K3 implementation review + GLM red team): settings-page saves **skip unchanged entries** (untouched hand-written YAML files are no longer rewritten into generated format, preserving comments); a broken roster file with a same-id legacy copy now surfaces an **error-level** diagnostic saying delegation is using the old config (no more silent fallback); a 409 conflict **keeps the unsaved draft** (only the baseline switches — saving again overwrites); failed migration (whole-batch or per-entry) **retries automatically** instead of latching for the process lifetime; `reasoningEffort` is validated as an effort id on save (alphanumerics and `._-`); the read-only settings page refuses "clear legacy" loudly with 403 instead of faking success; client wire-contract tests added (parseView previously dropped legacyCount, which was exactly where the migration banner failed to render).
+- **`.yml` roster lifecycle fixed**: the roster reads both `.yaml` and `.yml`; saving changed content through the settings page converges to `<id>.yaml` and removes the same-id `.yml`; deleting an entry removes both suffixes, preventing an old `.yml` from resurrecting after `.yaml` is deleted.
+- **Duplicate HTTP responses fixed**: delete/save handlers now return after sending their response, so each request is answered exactly once and the real server avoids `ERR_HTTP_HEADERS_SENT`.
+- Dual-review hardening (K3 implementation review + GLM red team): settings-page saves **skip unchanged entries** (untouched hand-written YAML files are no longer rewritten into generated format, preserving comments); a broken roster file with a same-id legacy copy now surfaces an **error-level** diagnostic saying delegation is using the old config (no more silent fallback); a 409 conflict **keeps the unsaved draft** (only the baseline switches — saving again overwrites); failed migration (whole-batch or per-entry) **retries automatically** instead of latching for the process lifetime; `reasoningEffort` is validated as an effort id on save (alphanumerics and `._-`); the read-only settings page refuses "clear legacy" loudly with 403 instead of faking success; client wire-contract tests added (parseView previously dropped legacyCount, which was exactly where the migration banner failed to render).
 
-### 内部 / Internal
+### Internal
 
-- 每次操作实时读目录（无缓存、无 watcher）；单条目写入原子化（临时文件 + rename 带重试）；id 规则加长度 ≤64 与 Windows 保留设备名黑名单；BOM 兼容；未知字段大声拒绝。
-  - Fresh directory reads per operation; atomic per-file writes with rename retries; id length cap + Windows reserved-name blacklist; BOM tolerance; loud unknown-field rejection.
+- Fresh directory reads per operation; atomic per-file writes with rename retries; id length cap + Windows reserved-name blacklist; BOM tolerance; loud unknown-field rejection.
 
 ## [0.2.8] — 2026-09-09
 
-- 设置页导航图标装饰（decorateSettingsNavIcon）。
+- Settings-page navigation icon decoration (decorateSettingsNavIcon).
 
 ## [0.2.7] — 2026-09-09
 
-- 修复：`toolFilter` 改为按**调用方会话的可限制集合**解析（此前按可见性，`subagent` 等 scope-local 工具会让委派整单失败）；忽略的名字带原因标注；`allow` 全不可应用时拒绝委派；`list_subagents` 目录同步展示生效后的过滤摘要。
+- Fixed: `toolFilter` now resolves against the **calling session's restrictable set** (previously visibility — scope-local tools such as `subagent` made a whole delegation fail); ignored names are annotated with a reason; a delegation is refused when no `allow` name applies; the `list_subagents` catalog shows the effective filter summary.
 
 ## [0.2.6] — 2026-09-06
 
-- DSH 0.1.2-rc.1 兼容性验证与声明（devDependencies 仍锁 rc.6）。
+- DSH 0.1.2-rc.1 compatibility verified and documented (devDependencies still pinned to rc.6).
 
 ## [0.2.5] — 2026-09-05
 
-- 修复设置页保存 400（移除保存期工具名预检，委派期 `tools.restrict` 为准）；新条目卡补齐缺失字段。
+- Fixed the settings-page save 400 (removed save-time tool-name prevalidation; `tools.restrict` at delegation time is authoritative); the new-entry card now carries the missing fields.
 
 [Unreleased]: https://github.com/MaRi23333/dsh-subagent-library/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/MaRi23333/dsh-subagent-library/compare/v0.2.8...v0.3.0
