@@ -1,92 +1,75 @@
 # AGENTS.md — dsh-subagent-library
 
-Project-scoped rules. The global `~/.dsh/AGENTS.md` still applies; where it uses `§N`, `§N` means the section of that file. Sections below follow the canonical numbering.
+Project-scoped rules. Global `~/.dsh/AGENTS.md` applies; `§N` = its sections. Numbering below is canonical.
 
 ## 1. Overview
 
-DeepSeek Harness Web GUI plugin that turns subagent roles into a persistent named roster: one YAML file per entry (`<id>.yaml`, id = file name) under a roster directory (default `~/.dsh/subagents`, override `subagent-library.entriesDir`), hot-effective with no restart and no cache. The host plane registers two model-facing tools — `list_subagents` (catalog: id + description + model) and `delegate` (start one entry by `library_id`) — plus the `/subagent` slash command and a Settings page. Delegation goes through `ctx.subagents`, so children keep ordinary harness semantics (approval pinned to `never`, inherited sandbox, depth cap, continuable). The 0.2.x inline `subagent-library.entries` settings document stays a READ-ONLY legacy fallback (files win, one idempotent seeding migration) and is scheduled for removal in 0.4.0.
+DSH Web GUI plugin that makes subagent roles a persistent named roster: one YAML per entry (`<id>.yaml`, id = file name) in `~/.dsh/subagents` (override `subagent-library.entriesDir`), hot-effective — no restart, no cache. Host plane: tools `list_subagents` (id + description + model) and `delegate` (start an entry by `library_id`), the `/subagent` command, a Settings page. Delegation goes via `ctx.subagents`, so children keep normal harness semantics (approval `never`, inherited sandbox, depth cap, continuable). The 0.2.x inline `subagent-library.entries` doc is a READ-ONLY legacy fallback (files win, one idempotent seeding migration); removed in 0.4.0.
 
 ## 2. Stack & toolchain
 
-- Node ≥ 22 (CI matrix 22/24); TypeScript ESM, strict `tsc --noEmit`; imports keep explicit `.ts`/`.tsx` extensions (`allowImportingTsExtensions`).
-- pnpm only; `package.json` pins `packageManager: pnpm@11.21.0` and CI installs with `--frozen-lockfile`. Runtime deps: `yaml`, `@deepseek-ai/schemastery`; peer: `@deepseek-ai/cordis@^4.0.1`; dev DSH packages pinned to `0.1.0-rc.6`.
-- Build: `tsdown` ([tsdown.config.ts](tsdown.config.ts)) → `lib/index.js` + `lib/client.js` (and `.map`). **`lib/` is committed**: always rebuild before committing and include the artifacts.
-- Planes: host = [src/index.ts](src/index.ts), [src/roster.ts](src/roster.ts), [src/profile-route.ts](src/profile-route.ts); client = [src/client/](src/client) (React 18, `platform: web`).
+- Node ≥ 22 (CI 22/24); TypeScript ESM, strict `tsc --noEmit`, explicit `.ts`/`.tsx` import extensions.
+- pnpm only, `packageManager: pnpm@11.21.0`, `--frozen-lockfile`; deps `yaml` + `@deepseek-ai/schemastery`, peer `@deepseek-ai/cordis@^4.0.1`, dev DSH `0.1.0-rc.6`.
+- `tsdown` ([tsdown.config.ts](tsdown.config.ts)) → `lib/index.js`, `lib/client.js`, `.map`; **`lib/` is committed** — rebuild in every commit. Planes: host = [src/index.ts](src/index.ts), [src/roster.ts](src/roster.ts), [src/profile-route.ts](src/profile-route.ts); client = [src/client/](src/client) (React 18, `platform: web`).
 
 ## 3. Verification
 
-In this order before handing work off:
+Order before handoff: `pnpm install --frozen-lockfile` (once) → `typecheck` → `test` → `build` → `smoke` → `check:pack`.
 
-1. `pnpm install --frozen-lockfile` (once per checkout)
-2. `pnpm run typecheck`
-3. `pnpm run test`
-4. `pnpm run build` — then confirm `lib/` is not stale. CI diffs rebuilt artifacts against `HEAD:lib/...` with pnpm virtual-store paths masked (`node_modules/.pnpm/<pkg>`); a stale or divergent `lib/` fails the build.
-5. `pnpm run smoke` (host + client bundle smoke)
-6. `pnpm run check:pack` — npm-tarball whitelist: no sources, no `.map`, no `HANDOFF.md` in the package.
-
-Never commit with a red step 2–4, and never leave `lib/` out of sync with `src/`.
+- `build` must leave `lib/` non-stale: CI diffs rebuilt artifacts vs `HEAD:lib/...` with pnpm virtual-store paths masked; divergence fails.
+- `check:pack` = npm whitelist: no sources, no `.map`, no `HANDOFF.md`. Never commit red typecheck/test/build or `lib/` out of sync with `src/`.
 
 ## 4. Code conventions
 
-- English only in code, comments, roster YAML, commit messages, and locale keys; user-facing copy is localized through [locale/en.json](locale/en.json) + [locale/zh.json](locale/zh.json).
-- Match the existing style: no semicolons, single quotes, 2-space indent, named exports, small single-purpose modules. No linter/formatter is configured — keep diffs consistent by hand.
-- The roster file shape is a contract: changes stay additive so existing 0.2.x/0.3.x documents keep loading; the legacy inline fallback stays read-only.
-- Comment the *why*, not the *what* (this codebase documents invariants and fixes inline, e.g. idempotent migration, profile-route preservation on roster read failure).
+- English in code, comments, roster YAML, commits, locale keys; UI copy via [locale/en.json](locale/en.json) + [locale/zh.json](locale/zh.json).
+- Style: no semicolons, single quotes, 2-space indent, named exports, small single-purpose modules. No linter/formatter — keep diffs consistent by hand.
+- Roster shape is a contract: additive changes only, 0.2.x/0.3.x docs keep loading, inline fallback stays read-only. Comment the *why* (invariants, fixes), not the *what*.
 
 ## 5. Testing setup
 
-- Tests live in [tests/](tests) and run via `tsx --test` (`pnpm run test`: roster, api, tools, client, profile-route); shared fixtures in [tests/helpers.ts](tests/helpers.ts).
-- A bugfix needs a regression test that fails before the fix; new roster parsing/normalization and route behaviour need coverage on the affected plane.
-- `pnpm run smoke` exercises a real host/client bundle — run it whenever `src/index.ts` wiring or the client bundle changes.
+- [tests/](tests) via `tsx --test` (`pnpm run test`: roster, api, tools, client, profile-route); fixtures in [tests/helpers.ts](tests/helpers.ts).
+- Bugfix ⇒ regression test failing before the fix; roster parsing/normalization and route changes ⇒ coverage on that plane; wiring or client-bundle changes ⇒ rerun `smoke`.
 
 ## 6. Branching & hosting
 
-- **Always work on `main`.** It is the only working branch: no feature branches, no per-task worktrees, no PR-only flow.
-- `origin` = `github.com/zumik3-del/dsh-subagent-library` (this fork); upstream is `MaRi23333/dsh-subagent-library`. Do not fetch, rebase, or force-push without an explicit request.
-- Never run `git commit`/`push`/`tag` yourself — that is the `git` subagent's job (global §Git operations). Releases publish to npm via [.github/workflows/publish.yml](.github/workflows/publish.yml) on a published release.
+- **Always work on `main`** — no feature branches, worktrees, or PR-only flow.
+- `origin` = `github.com/zumik3-del/dsh-subagent-library` (this fork); upstream `MaRi23333/dsh-subagent-library`. No fetch/rebase/force-push without an explicit request.
+- Never `git commit`/`push`/`tag` yourself — the `git` subagent's job (global §Git operations). Releases publish to npm via [.github/workflows/publish.yml](.github/workflows/publish.yml) on a published release.
 
-### Plugin lifecycle (local source → installed plugin)
+**Plugin lifecycle (source → installed plugin).** dsh runs this plugin from the git spec, so a source change does nothing until the profile copy is re-resolved:
 
-The repo is the source of the plugin that dsh itself runs from the git spec, so source changes do nothing until the profile copy is re-resolved. The loop is fixed and always interactive at one point:
-
-1. Edit `src/`, rebuild `lib/` and verify (§3) — a `lib/`-only or `src`-only change is not done.
+1. Edit `src/`, rebuild `lib/`, verify (§3) — `src`-only or `lib`-only is not done.
 2. Push to `origin/main` (git role).
-3. **Ask the user whether to update the plugin in dsh** and wait for an explicit yes. Never update the installed copy on your own initiative.
-4. On yes: `dsh plugin --profile web update dsh-subagent-library`; a plain `pnpm install` reuses the pinned commit and pulls nothing.
-5. Verify the profile copy matches the pushed artifacts (`sha256sum` on `lib/index.js` and `lib/client.js` against the installed `node_modules/dsh-subagent-library/lib/`), and remind the user to hard-refresh the GUI (client bundle is cached).
-6. Print the restart command and stop. **Never restart dsh yourself** — the restart kills this session; the user runs it:
-
-   ```sh
-   sudo systemctl restart dsh.service
-   ```
+3. **Ask the user whether to update the plugin in dsh**; wait for an explicit yes. Never update the installed copy unprompted.
+4. On yes: `dsh plugin --profile web update dsh-subagent-library` (a plain `pnpm install` reuses the pinned commit and pulls nothing).
+5. Check `sha256sum lib/index.js lib/client.js` against the installed `node_modules/dsh-subagent-library/lib/`; remind the user to hard-refresh the GUI (cached client bundle).
+6. Print `sudo systemctl restart dsh.service` and stop — **never restart dsh yourself**, it kills this session.
 
 ## 7. Memory conventions
 
-- SynaptoMind is cwd-scoped: always pass `cwd` for this repo and search before creating.
-- Store durable decisions only (no diffs, logs, or reports): one atomic unit, ≤600 chars, English, identifiers verbatim; `memory_reflect` at natural breakpoints with task id + final status.
+- SynaptoMind is cwd-scoped: pass `cwd` for this repo, search before creating.
+- Durable decisions only (no diffs/logs/reports): one atomic unit, ≤600 chars, English, identifiers verbatim; `memory_reflect` at breakpoints with task id + final status.
 
 ## 8. Known pitfalls
 
-- The local pnpm can be newer than the pinned `pnpm@11.21.0` (12.x on this machine). Install with `--frozen-lockfile`; do not "fix" the drift by regenerating the lockfile.
-- `lib/` is git-tracked build output — editing only `src/` silently ships old code; CI catches it via the normalized artifact diff.
-- Keep `lib/*.map` in git but out of the published package; `check:pack` fails on either direction.
-- [.gitignore](.gitignore) deliberately drops `HANDOFF.md` and `settings.json` (local paths, review records) while explicitly keeping `lib/` — preserve that distinction.
-- Windows vs Linux builds differ only in pnpm virtual-store paths; never hand-edit generated bundle paths to make a diff pass.
+- Local pnpm may be newer than pinned `pnpm@11.21.0` (12.x here): install `--frozen-lockfile`, never regenerate the lockfile to "fix" the drift.
+- `lib/` is tracked build output — editing only `src/` silently ships old code (CI catches it); `lib/*.map` stays in git but out of the package (`check:pack` fails either way).
+- [.gitignore](.gitignore) drops `HANDOFF.md` and `settings.json` but explicitly keeps `lib/`; Windows vs Linux diffs differ only in pnpm virtual-store paths — never hand-edit generated paths.
 
 ## 9. Delegation map
 
-Roles come from the named subagent library (`~/.dsh/subagents/*.yaml`); one row per role.
+Roles come from the named subagent library (`~/.dsh/subagents/*.yaml`), one row per role.
 
 | Role | When | Notes |
 | --- | --- | --- |
-| developer | implementation, refactor, bugfix | this repo *is* the roster plugin; entries it manages live in `~/.dsh/subagents`, not here |
+| developer | implementation, refactor, bugfix | this repo *is* the roster plugin; its entries live in `~/.dsh/subagents`, not here |
 | tester | tests, runs, coverage | batch suite at the batch boundary |
 | reviewer | non-trivial diffs | read-only; findings as severity + `path:line` |
 | git | commits, pushes, tags, releases | strictly sequential, never a tracker client |
 
-This `AGENTS.md` is orchestrator-owned: subagents propose changes through a tracker comment, never by editing it.
+Orchestrator-owned: subagents propose edits via a tracker comment, never by editing it.
 
 ## 10. Workspace & communication
 
-- Channel = the ziptask tracker: the full English contract goes in the task description (`get_template("task")` / `("epic")`), the outcome in a completion comment; evidence lives in comments, not files.
-- Non-code artifacts go to the ai-workdir; handoff is `memory_reflect`. Up to 4 subagents run concurrently with `git` sequential at the end of a batch; mutators work in the shared `main` checkout (§6), so keep concurrent tasks on disjoint files.
+- Channel = the ziptask tracker: full English contract in the task description (`get_template("task")` / `("epic")`), outcome in a completion comment; evidence in comments, not files.
+- Non-code artifacts → ai-workdir; handoff → `memory_reflect`. Up to 4 subagents concurrently, `git` sequential at the batch end; mutators share the `main` checkout (§6) — keep concurrent tasks on disjoint files.
