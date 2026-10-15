@@ -55,6 +55,7 @@ Order before handoff: `pnpm install --frozen-lockfile` (once) → `typecheck` �
 - Local pnpm may be newer than pinned `pnpm@11.21.0` (12.x here): install `--frozen-lockfile`, never regenerate the lockfile to "fix" the drift.
 - `lib/` is tracked build output — editing only `src/` silently ships old code (CI catches it); `lib/*.map` stays in git but out of the package (`check:pack` fails either way).
 - [.gitignore](.gitignore) drops `HANDOFF.md` and `settings.json` but explicitly keeps `lib/`; Windows vs Linux diffs differ only in pnpm virtual-store paths — never hand-edit generated paths.
+- **`ctx.subagents` has two host generations**: DSH ≤0.2.0 exposes `start`/`startContinuable`, DSH ≥0.2.1 replaces both with one `startActivation` (the provider picks the backend; `delivery` decides whether the parent is also notified). [src/index.ts](src/index.ts) probes structurally at runtime and must keep typechecking against the pinned `0.1.0-rc.6` dev types.
 
 ## 9. Delegation map
 

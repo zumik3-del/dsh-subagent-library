@@ -23,7 +23,10 @@
  * spawn provider (or any provider an entry names), so children keep the
  * harness' ordinary subagent semantics: approval pinned to `never` on
  * delegation, inherited sandbox scope, depth caps, and continuable support
- * where the provider offers it.
+ * where the provider offers it. That seam has two host generations — DSH
+ * ≤0.2.0 (`start` / `startContinuable`) and DSH ≥0.2.1 (one `startActivation`
+ * call) — so the plugin probes the running host structurally and dispatches on
+ * whichever surface it exposes (see ActivationSeam).
  *
  * @module dsh-subagent-library
  */
@@ -34,8 +37,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
-import { assertSubagentMaxDepth, settleRun } from '@deepseek-ai/dsh-subagent'
-import type { SubagentResult, SubagentRun, SubagentStartRequest } from '@deepseek-ai/dsh-subagent'
+import { assertSubagentMaxDepth } from '@deepseek-ai/dsh-subagent'
+import type { SubagentResult, SubagentStartRequest } from '@deepseek-ai/dsh-subagent'
 // NOTE: `@deepseek-ai/dsh-settings` must NOT be value-imported here. DSH
 // 0.1.7 removed the settingsNamespace() VALUE export (type-only remains), and
 // a value import fails the whole module load → the entire plugin 503s
@@ -121,10 +124,97 @@ function outputValueText(values: readonly JsonValue[]): string {
     .join('')
 }
 
-/** Settle pending startup without rejecting the task producer contract. */
-async function settleStart(start: Promise<SubagentRun>, signal: AbortSignal): Promise<{ status: string; detail?: string }> {
+/**
+ * The run surface this plugin consumes: identity, terminal result, release.
+ * Declared structurally because the two host generations describe their handle
+ * differently — DSH ≤0.2.0 additionally requires `localAgent`, which the
+ * activation seam's receipt does not carry.
+ */
+interface ChildRun {
+  id: string
+  result: Promise<SubagentResult>
+  dispose: () => Promise<void>
+}
+
+/**
+ * Structural view of the DSH ≥0.2.1 subagent seam on `ctx.subagents`.
+ *
+ * Newer hosts replaced the two legacy dispatch methods (`start` for one-shot
+ * children, `startContinuable` for background ones) with ONE managed-activation
+ * call: the backend decides the kind, because a provider implementing
+ * `prepareContinuable` always produces a durable, resumable child. `delivery`
+ * then only chooses whether the host ALSO notifies the parent on settlement
+ * (`parent`) or hands the outcome to the caller alone (`caller`).
+ *
+ * The roster, both tools and the settings page are identical on either
+ * generation, so the drift is confined to this adapter. Detection is
+ * structural — the same runtime-probe pattern as the settings seam below —
+ * because the plugin must load on both host generations.
+ */
+interface ActivationSeam {
+  startActivation(spec: {
+    provider: string
+    label: string
+    request: Omit<SubagentStartRequest, 'signal'>
+    signal: AbortSignal
+    delivery: 'parent' | 'caller'
+  }): Promise<{
+    childId: ChildRun['id']
+    result: Promise<SubagentResult>
+    dispose: () => Promise<void>
+  }>
+}
+
+/** The activation generation (DSH ≥0.2.1), or undefined on DSH ≤0.2.0. */
+function activationSeam(service: unknown): ActivationSeam | undefined {
+  return typeof (service as Partial<ActivationSeam> | undefined)?.startActivation === 'function'
+    ? service as ActivationSeam
+    : undefined
+}
+
+/** Terminal job outcome (the dsh-jobs `JobOutcome` shape) plus the legacy
+ *  `output` key the pre-0.2.1 registry carried the child's final text in. */
+interface ChildOutcome {
+  status: string
+  detail?: string
+  output?: string
+}
+
+/** Terminal child outcome as the jobs registry spells it. Mirrors the harness'
+ *  own stop-reason mapping (`aborted` ⇒ killed, everything else ⇒ failed). */
+function runOutcome(result: SubagentResult): ChildOutcome {
+  switch (result.stopReason as string) {
+    case 'completed': return { status: 'completed', output: outputValueText(result.output as unknown as JsonValue[]) }
+    case 'aborted': return { status: 'killed' }
+    default: return { status: 'failed', detail: String(result.stopReason) }
+  }
+}
+
+/** Await the child result, release the run, then return its task outcome.
+ *  Result and disposal failures become `failed`; when both fail, both details
+ *  survive (the harness' own `settleRun`, over {@link ChildRun}). */
+async function settleChild(run: ChildRun): Promise<ChildOutcome> {
+  let outcome: ChildOutcome
   try {
-    return await settleRun(await start)
+    outcome = runOutcome(await run.result)
+  } catch (error: unknown) {
+    outcome = { status: 'failed', detail: String(error) }
+  }
+  try {
+    await run.dispose()
+  } catch (error: unknown) {
+    return {
+      status: 'failed',
+      detail: `${outcome.detail === undefined ? '' : `${outcome.detail}; `}dispose failed: ${String(error)}`,
+    }
+  }
+  return outcome
+}
+
+/** Settle pending startup without rejecting the task producer contract. */
+async function settleStart(start: Promise<ChildRun>, signal: AbortSignal): Promise<ChildOutcome> {
+  try {
+    return await settleChild(await start)
   } catch (error: unknown) {
     return signal.aborted
       ? { status: 'killed' }
@@ -133,8 +223,8 @@ async function settleStart(start: Promise<SubagentRun>, signal: AbortSignal): Pr
 }
 
 /** Foreground collection: await the child, dispose the run, map stop reasons.
- *  `run.result` rejection must still release the run (mirrors settleRun). */
-async function settleForegroundRun(run: SubagentRun): Promise<{ kind: 'foreground'; runId: string; output: JsonValue[] }> {
+ *  `run.result` rejection must still release the run (mirrors settleChild). */
+async function settleForegroundRun(run: ChildRun): Promise<{ kind: 'foreground'; runId: string; output: JsonValue[] }> {
   let result: SubagentResult
   try {
     result = await run.result
@@ -1175,6 +1265,9 @@ export function apply(ctx: Context, config: Config) {
       if (transport === undefined) {
         throw new Error(`subagent transport provider "${subagentProviderName}" is not registered (available: ${ctx.subagents.list().join(', ') || 'none'})`)
       }
+      // Which of the two host generations dispatches the child (see
+      // ActivationSeam): resolved once per delegation, after the transport.
+      const seam = activationSeam(ctx.subagents)
 
       const continuable = entry.backgroundMode === 'continuable'
       if (continuable && transport.prepareContinuable === undefined) {
@@ -1256,16 +1349,43 @@ export function apply(ctx: Context, config: Config) {
       }
 
       const runInBackground = args.run_in_background === true || continuable
+      const label = args.description ?? args.library_id
+      /**
+       * Start a NON-continuable child through whichever seam this host exposes,
+       * normalized to the legacy run shape so outcome mapping (`settleStart`)
+       * and foreground collection stay seam-independent. On the activation
+       * generation `delivery: 'caller'` keeps the settlement out of the parent's
+       * context: this call is the consumer, not the parent model.
+       */
+      const startRun = async (signal: AbortSignal): Promise<ChildRun> => {
+        if (seam === undefined) return await ctx.subagents.start(subagentProviderName, { ...request, signal })
+        const activation = await seam.startActivation({
+          provider: subagentProviderName,
+          label,
+          request,
+          signal,
+          delivery: 'caller',
+        })
+        return { id: activation.childId, result: activation.result, dispose: () => activation.dispose() }
+      }
       if (runInBackground) {
         if (continuable) {
           return {
             kind: 'continuable',
-            subagentId: (await ctx.subagents.startContinuable({
-              provider: subagentProviderName,
-              label: args.description ?? args.library_id,
-              request,
-              signal: exec.signal,
-            })).childId,
+            subagentId: seam === undefined
+              ? (await ctx.subagents.startContinuable({
+                  provider: subagentProviderName,
+                  label,
+                  request,
+                  signal: exec.signal,
+                })).childId
+              : (await seam.startActivation({
+                  provider: subagentProviderName,
+                  label,
+                  request,
+                  signal: exec.signal,
+                  delivery: 'parent',
+                })).childId,
             ...droppedNote,
           }
         }
@@ -1277,18 +1397,28 @@ export function apply(ctx: Context, config: Config) {
           kind: 'background',
           jobId: jobs.start({
             kind: 'subagent',
-            label: args.description ?? args.library_id,
-            owner: parent,
+            label,
+            // The jobs registry keys owners by SESSION ID on the activation
+            // generation (dsh-tool-bash and dsh-tool-terminal both pass
+            // `exec.agent.id`); the legacy registry took the Agent object, which
+            // is what this plugin has always sent there.
+            owner: seam === undefined ? parent : parent.id,
             run: () => {
               const controller = new AbortController()
+              let started: ChildRun | undefined
+              // Aborting cancels the activation only BEFORE publication; after
+              // it, releasing the child is the caller's job. `dispose()` is
+              // idempotent, so the post-settlement call is a no-op.
+              const running = startRun(controller.signal).then((run) => {
+                started = run
+                return run
+              })
               return {
                 cancel: (reason) => {
                   controller.abort(reason ?? 'background subagent task killed')
+                  if (started !== undefined) void started.dispose().catch(() => { /* settleStart reports it */ })
                 },
-                done: settleStart(ctx.subagents.start(subagentProviderName, {
-                  ...request,
-                  signal: controller.signal,
-                }), controller.signal),
+                done: settleStart(running, controller.signal),
               }
             },
           }),
@@ -1296,10 +1426,7 @@ export function apply(ctx: Context, config: Config) {
         }
       }
       return {
-        ...(await settleForegroundRun(await ctx.subagents.start(subagentProviderName, {
-          ...request,
-          signal: exec.signal,
-        }))),
+        ...(await settleForegroundRun(await startRun(exec.signal))),
         ...droppedNote,
       }
     },

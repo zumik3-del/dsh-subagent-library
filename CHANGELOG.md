@@ -4,6 +4,15 @@
 
 This file documents user-facing changes. Format loosely follows [Keep a Changelog]; versions follow [SemVer].
 
+## [0.3.5] — 2026-10-15
+
+### 修复 / Fixed
+
+- **适配 DSH 0.2.1-alpha.2 的子代理派发缝**：新宿主移除了 `ctx.subagents.start` 与 `startContinuable`，改为单一 `startActivation`（后端由 provider 自己决定，`delivery` 只决定是否同时通知父会话）。插件现在**运行时结构探测两代宿主**：≥0.2.1 走激活缝（continuable 条目 `delivery: 'parent'`；前台与后台条目 `delivery: 'caller'`，由插件自己收敛结果，取消时 dispose 激活），≤0.2.0 保持原有 `start`/`startContinuable` 通道。名册、两个工具与设置页在两代宿主上行为一致；0.3.5 之前在这些新宿主上委派会以 `ctx.subagents.startContinuable is not a function` 失败。
+  - **Adapts delegation to the DSH 0.2.1-alpha.2 subagent seam**: the new host removed `ctx.subagents.start` / `startContinuable` in favor of one `startActivation` call (the provider picks the backend; `delivery` only decides whether the parent is also notified). The plugin now detects the host generation structurally at runtime: ≥0.2.1 uses the activation seam (a continuable entry with `delivery: 'parent'`; foreground and background entries with `delivery: 'caller'`, the plugin settling the result itself and disposing the activation on cancellation), while ≤0.2.0 keeps the original `start`/`startContinuable` channel. Roster, both tools and Settings behave identically on either generation. Before 0.3.5, delegation on these hosts failed with `ctx.subagents.startContinuable is not a function`.
+- 后台一次性委派在激活缝上把任务所有者登记为**会话 id**（`exec.agent.id`，与 dsh-tool-bash / dsh-tool-terminal 一致）；旧宿主仍沿用 Agent 对象。
+  - A background one-shot delegation now registers its job owner as the SESSION ID (`exec.agent.id`, matching dsh-tool-bash / dsh-tool-terminal) on the activation seam; the legacy host keeps receiving the Agent object.
+
 ## [0.3.4] — 2026-10-14
 
 ### 修复 / Fixed

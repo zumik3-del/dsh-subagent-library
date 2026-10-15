@@ -348,3 +348,82 @@ test('schema defaults survive clear-legacy + delete on a raw-patch host (SUB-COM
   assert.equal(host.subagentStarts[0]?.provider, 'spawn')
   assert.equal(host.applyConfig['entriesDir'], '/roster', 'an explicitly configured entriesDir must also survive')
 })
+
+/**
+ * DSH ≥0.2.1 removed `ctx.subagents.start` / `startContinuable` and dispatches
+ * every child through ONE `startActivation` call (the backend picks the kind,
+ * `delivery` decides whether the parent is also notified). These tests run
+ * against a double that exposes ONLY that surface, so a plugin still calling
+ * the removed methods fails here instead of only in production.
+ */
+const ACTIVATION_HOST = {
+  subagentProviders: ['spawn'],
+  subagentsShape: 'activation' as const,
+}
+
+test('delegate starts a continuable entry through startActivation (parent delivery)', async () => {
+  const host = makeHost({
+    ...ACTIVATION_HOST,
+    baseEntries: { worker: { description: 'fake', backgroundMode: 'continuable' } },
+  })
+  const result = await tool(host, 'delegate').execute(
+    { library_id: 'worker', prompt: 'do it', description: 'task' },
+    EXEC,
+  )
+  assert.deepEqual(result, { kind: 'continuable', subagentId: 'fake-activation-1' })
+  assert.equal(host.subagentStarts.length, 0, 'the removed service method must not be called')
+  const spec = host.subagentActivations[0]
+  assert.equal(spec?.delivery, 'parent')
+  assert.equal(spec?.provider, 'spawn')
+  assert.equal(spec?.label, 'task')
+  assert.deepEqual(spec?.request['prompt'], [{ type: 'text', text: 'do it' }])
+})
+
+test('delegate waits for and returns a one-shot child on the activation seam', async () => {
+  const host = makeHost({
+    ...ACTIVATION_HOST,
+    baseEntries: { reader: { description: 'fake' } },
+    activationResult: { stopReason: 'completed', output: [{ type: 'text', text: 'child answer' }] },
+  })
+  const result = await tool(host, 'delegate').execute({ library_id: 'reader', prompt: 'x' }, EXEC)
+  assert.deepEqual(result, {
+    kind: 'foreground',
+    runId: 'fake-activation-1',
+    output: [{ type: 'text', text: 'child answer' }],
+  })
+  assert.equal(host.subagentActivations[0]?.delivery, 'caller', 'the caller consumes the result, not the parent')
+  assert.equal(host.subagentActivations[0]?.disposeCalls(), 1, 'the receipt must be released')
+})
+
+test('delegate maps a non-completed activation result to a failed run', async () => {
+  const host = makeHost({
+    ...ACTIVATION_HOST,
+    baseEntries: { reader: { description: 'fake' } },
+    activationResult: { stopReason: 'max-tokens', output: [{ type: 'text', text: 'partial' }] },
+  })
+  await assert.rejects(
+    () => tool(host, 'delegate').execute({ library_id: 'reader', prompt: 'x' }, EXEC),
+    /subagent run ended: max-tokens — partial output: partial/,
+  )
+  assert.equal(host.subagentActivations[0]?.disposeCalls(), 1)
+})
+
+test('delegate keys a background activation job by SESSION ID and settles it', async () => {
+  const host = makeHost({
+    ...ACTIVATION_HOST,
+    baseEntries: { reader: { description: 'fake' } },
+  })
+  // The jobs registry fences owners by session id (dsh-tool-bash & -terminal
+  // both pass `exec.agent.id`), never by the Agent object.
+  const owner = { id: 'parent-session', fake: 'parent-agent' }
+  const result = await tool(host, 'delegate').execute(
+    { library_id: 'reader', prompt: 'x', run_in_background: true },
+    { agent: owner, signal: new AbortController().signal },
+  )
+  assert.deepEqual(result, { kind: 'background', jobId: 'fake-job-1' })
+  assert.equal(host.jobStarts[0]?.kind, 'subagent')
+  assert.equal(host.jobStarts[0]?.owner, 'parent-session')
+  const job = host.jobStarts[0]?.run()
+  assert.deepEqual(await job?.done, { status: 'completed', output: 'fake child reply' })
+  assert.equal(host.subagentActivations[0]?.delivery, 'caller')
+})

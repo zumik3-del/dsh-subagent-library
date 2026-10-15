@@ -131,7 +131,11 @@ backgroundMode: continuable
 
 `0.3.1` 已适配 DSH `0.1.7-rc.2` 引入的 SettingsForms 设置机制；开发侧于 2026-09-30 进一步报告，它在 DSH `0.2.0-rc.2` 与同版本桌面客户端中可用。名册仍采用 0.3 系列的目录化存储与原有迁移规则，没有因本次说明更新再次迁移数据。
 
-**0.3.2** 为插件管理页增加随客户端语言切换的中英文名称与简介，名册和委派行为不变。更新说明见 [CHANGELOG.md](./CHANGELOG.md)。
+**0.3.2** 为插件管理页增加随客户端语言切换的中英文名称与简介，名册和委派行为不变。
+
+**0.3.5** 适配 DSH `0.2.1-alpha.2` 的 `ctx.subagents.startActivation` 派发缝（该版本移除了 `start` / `startContinuable`）：插件在运行时结构探测两代宿主，名册、两个工具与设置页在 `0.1.x`、`0.2.0` 与 `0.2.1-alpha.2` 上行为一致，委派不再以 `ctx.subagents.startContinuable is not a function` 失败。
+
+更新说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 桌面客户端沿用 Web 插件界面，无需另装桌面专用包。该兼容说明依据维护者使用反馈；模型在线调用仍取决于各 Provider 的配置与服务，不能由设置页可用推断全部模型或跨平台场景已验收。
 

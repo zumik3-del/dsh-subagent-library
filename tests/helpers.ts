@@ -238,6 +238,15 @@ export interface HostOptions extends SettingsOptions {
   noToolView?: boolean
   /** Subagent transport providers the fake registry knows (default: none). */
   subagentProviders?: string[]
+  /**
+   * Which subagent service generation the fake host exposes.
+   * `legacy` (default): DSH ≤0.2.0 — `start` / `startContinuable`.
+   * `activation`: DSH ≥0.2.1 — `startActivation` ONLY, so a plugin still calling
+   * the removed methods fails here instead of only in production.
+   */
+  subagentsShape?: 'legacy' | 'activation'
+  /** Terminal result the fake activation seam resolves with. */
+  activationResult?: { stopReason: string; output: Array<{ type: string; text: string }> }
   /** Current profile name (`ctx.profileContext.name`). Absent keeps shared routes. */
   profileName?: string
   /** LLM provider ids registered in this profile. Absent means "cannot tell". */
@@ -250,6 +259,19 @@ export interface MockHost {
   settings: MockSettings
   /** Every `subagents.start(provider, request)` the plugin performed. */
   subagentStarts: Array<{ provider: string, request: Record<string, unknown> }>
+  /**
+   * Every `subagents.startActivation(spec)` the plugin performed (activation
+   * generation only), plus how often the receipt was disposed.
+   */
+  subagentActivations: Array<{
+    provider: string
+    label: string
+    request: Record<string, unknown>
+    delivery: string
+    disposeCalls: () => number
+  }>
+  /** Every `jobs.start(spec)` the plugin performed; call `run()` to start it. */
+  jobStarts: Array<{ kind: string, label: string, owner: unknown, run: () => { cancel: (reason?: string) => void, done: Promise<unknown> } }>
   /** Every scope passed to `tools.view(scope)` — must be the Agent object. */
   toolViewScopes: unknown[]
   /** The in-memory FsPort the plugin was given (assert files written here). */
@@ -346,6 +368,8 @@ export function makeHost(options: HostOptions = {}): MockHost {
   const restrictableTools = new Set(options.restrictableTools ?? options.knownTools ?? [])
   const settings = makeSettings(options)
   const subagentStarts: MockHost['subagentStarts'] = []
+  const subagentActivations: MockHost['subagentActivations'] = []
+  const jobStarts: MockHost['jobStarts'] = []
   const toolViewScopes: MockHost['toolViewScopes'] = []
   /** The plugin registers TWO settings injects on ≥0.1.7 (seam +
    *  configEditor binding); the mock must fire ALL of them. */
@@ -361,6 +385,9 @@ export function makeHost(options: HostOptions = {}): MockHost {
   const providerNames = options.subagentProviders ?? []
   const providers = new Map(providerNames.map((providerName) => [providerName, {
     capabilities: { depthLimit: true, persona: true, toolFilter: true },
+    // A local/continuable backend on BOTH generations: DSH ≤0.2.0 gates
+    // `startContinuable` on this method, DSH ≥0.2.1 picks local activation with it.
+    prepareContinuable: () => Promise.resolve({}),
     start: (name: string, request: Record<string, unknown>) => {
       subagentStarts.push({ provider: name, request })
       return {
@@ -370,6 +397,53 @@ export function makeHost(options: HostOptions = {}): MockHost {
       }
     },
   }]))
+  const activationResult = options.activationResult
+    ?? { stopReason: 'completed', output: [{ type: 'text', text: 'fake child reply' }] }
+  let activationCount = 0
+  const routeLookup = {
+    getProvider: (name: string) => providers.get(name),
+    list: () => providerNames,
+  }
+  const subagents = options.subagentsShape === 'activation'
+    ? {
+        ...routeLookup,
+        // DSH ≥0.2.1 surface: `start`/`startContinuable` are GONE, so anything
+        // still calling them fails here exactly as it fails in production.
+        startActivation: (spec: {
+          provider: string
+          label: string
+          request: Record<string, unknown>
+          delivery: string
+        }) => {
+          if (!providers.has(spec.provider)) throw new Error(`fake subagents: no provider "${spec.provider}"`)
+          let disposeCalls = 0
+          subagentActivations.push({
+            provider: spec.provider,
+            label: spec.label,
+            request: spec.request,
+            delivery: spec.delivery,
+            disposeCalls: () => disposeCalls,
+          })
+          activationCount += 1
+          return Promise.resolve({
+            childId: `fake-activation-${activationCount}`,
+            result: Promise.resolve(activationResult),
+            dispose: () => {
+              disposeCalls += 1
+              return Promise.resolve()
+            },
+          })
+        },
+      }
+    : {
+        ...routeLookup,
+        // Service-level entry point: the plugin calls ctx.subagents.start(name, request).
+        start: (name: string, request: Record<string, unknown>) => {
+          const provider = providers.get(name)
+          if (provider === undefined) throw new Error(`fake subagents: no provider "${name}"`)
+          return provider.start(name, request)
+        },
+      }
 
   const ctx = {
     inject(deps: string[], cb: (ictx: unknown) => void): void {
@@ -398,20 +472,20 @@ export function makeHost(options: HostOptions = {}): MockHost {
           }),
     },
     systemPrompt: { section: () => {} },
-    subagents: {
-      getProvider: (name: string) => providers.get(name),
-      list: () => providerNames,
-      // Service-level entry point: the plugin calls ctx.subagents.start(name, request).
-      start: (name: string, request: Record<string, unknown>) => {
-        const provider = providers.get(name)
-        if (provider === undefined) throw new Error(`fake subagents: no provider "${name}"`)
-        return provider.start(name, request)
-      },
-    },
+    subagents,
     get: (name: string) => {
       if (name === 'profileContext' && options.profileName !== undefined) return { name: options.profileName }
       if (name === 'llm' && options.llmProviders !== undefined) {
         return { listProviders: () => options.llmProviders?.map((id) => ({ id, name: id })) ?? [] }
+      }
+      if (name === 'jobs') {
+        // Recorded, not run: a test starts the job itself to inspect its hooks.
+        return {
+          start: (spec: MockHost['jobStarts'][number]) => {
+            jobStarts.push(spec)
+            return `fake-job-${jobStarts.length}`
+          },
+        }
       }
       return undefined
     },
@@ -431,7 +505,9 @@ export function makeHost(options: HostOptions = {}): MockHost {
     : { settings, effect: (fn: () => unknown) => fn() }
   for (const cb of settingsCbs) cb(sctxFor)
 
-  return { web, tools, settings, forms, applyConfig, subagentStarts, toolViewScopes, fs }
+  return {
+    web, tools, settings, forms, applyConfig, subagentStarts, subagentActivations, jobStarts, toolViewScopes, fs,
+  }
 }
 
 export interface ReqOptions {
