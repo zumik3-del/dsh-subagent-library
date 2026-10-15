@@ -1,5 +1,5 @@
 /**
- * Settings-nav icon decoration for this plugin's own row (子代理库).
+ * Settings-nav icon decoration for this plugin's own row (Subagent Library).
  *
  * The official settings shell's navIcon(id) table is closed — official ids
  * get drawn icons and everything else falls back to a generic gear. This
@@ -18,7 +18,7 @@ const NAV_ICON_INNER =
   + '<path d="M1.75 9.25h1.5"/>'
   + '<path d="M12.75 9.25h1.5"/>'
 
-const NAV_LABELS = new Set(['子代理库'])
+const NAV_LABELS = new Set(['Subagent Library'])
 
 interface EffectCapableContext {
   // Loose on purpose: cordis effect signatures vary across harness builds and

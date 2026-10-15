@@ -190,15 +190,15 @@ export interface RosterView {
  */
 export function parseEntryDocument(raw: unknown): { entry: Entry, enabled: boolean } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new Error('条目内容必须是对象（字段：description / provider / model / …）')
+    throw new Error('Entry content must be an object (fields: description / provider / model / …)')
   }
   const record = raw as Record<string, unknown>
   const unknownKeys = Object.keys(record).filter((key) => key !== 'enabled' && !ENTRY_KEYS.has(key))
   if (unknownKeys.length > 0) {
-    throw new Error(`未知字段：${unknownKeys.join(', ')}（可用：${[...ENTRY_KEYS, 'enabled'].join(', ')}）`)
+    throw new Error(`Unknown fields: ${unknownKeys.join(', ')} (allowed: ${[...ENTRY_KEYS, 'enabled'].join(', ')})`)
   }
   const { enabled = true, ...rest } = record
-  if (typeof enabled !== 'boolean') throw new Error('enabled 必须是布尔值')
+  if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean')
   // reasoningEffort is adapter-owned and deliberately free-form, but it must
   // LOOK like an id: the official model-selection layer overrides or clears
   // an inherited effort when installed, and on the raw path the adapter reads
@@ -206,12 +206,12 @@ export function parseEntryDocument(raw: unknown): { entry: Entry, enabled: boole
   // adapter far away from the YAML line that caused it (red team A4).
   if (typeof record['reasoningEffort'] === 'string'
     && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(record['reasoningEffort'])) {
-    throw new Error(`reasoningEffort 须为 effort id（如 max / high / medium / low），收到 "${record['reasoningEffort']}"`)
+    throw new Error(`reasoningEffort must be an effort id (e.g. max / high / medium / low), got "${record['reasoningEffort']}"`)
   }
   // The schema performs the real structural validation at runtime; the cast
   // only bridges the static type (rest may legitimately lack optional keys).
   const entry = EntrySchema(rest as unknown as Entry)
-  if (typeof entry !== 'object' || entry === null) throw new Error('条目校验失败')
+  if (typeof entry !== 'object' || entry === null) throw new Error('Entry validation failed')
   return { entry, enabled }
 }
 
@@ -314,7 +314,7 @@ export async function writeEntryFile(options: {
   // Canonicalize on save: a surviving `.yml` sibling of the same id would
   // create a duplicate-id conflict on the next read and resurrect the OLD
   // entry when the new `.yaml` is deleted (SUB-ROSTER-YML-001). Removing it
-  // here is the documented convergence semantics: 保存统一收敛为 `.yaml`。
+  // here is the documented convergence semantics: saving converges on `.yaml`.
   await removeYmlSibling(options.dir, options.id, fsp, wait)
 }
 
@@ -356,7 +356,7 @@ export async function loadRoster(options: LoadRosterOptions): Promise<RosterView
       listing = 'missing'
     } else {
       listing = 'unreadable'
-      diagnostics.push({ severity: 'error', message: `名册目录不可读 ${options.dir}：${String(error)}` })
+      diagnostics.push({ severity: 'error', message: `Roster directory unreadable ${options.dir}: ${String(error)}` })
     }
     names = []
   }
@@ -380,7 +380,7 @@ export async function loadRoster(options: LoadRosterOptions): Promise<RosterView
     if (id.startsWith('_')) continue
     presentIds.add(id)
     if (lower !== name) {
-      diagnostics.push({ severity: 'warning', file: name, id, message: `文件名必须全小写，已跳过 "${name}"` })
+      diagnostics.push({ severity: 'warning', file: name, id, message: `File name must be all lowercase; skipped "${name}"` })
       continue
     }
     const idError = validateEntryId(id)
@@ -390,7 +390,7 @@ export async function loadRoster(options: LoadRosterOptions): Promise<RosterView
     }
     const existing = owner.get(id)
     if (existing !== undefined) {
-      diagnostics.push({ severity: 'error', file: name, id, message: `与 "${existing}" 解析出相同 id（.yaml/.yml 只能保留一个），已跳过` })
+      diagnostics.push({ severity: 'error', file: name, id, message: `Resolves to the same id as "${existing}" (only one of .yaml/.yml is kept); skipped` })
       continue
     }
     owner.set(id, name)
@@ -398,7 +398,7 @@ export async function loadRoster(options: LoadRosterOptions): Promise<RosterView
     try {
       text = (await fsp.readFile(nodePath.join(options.dir, name))).toString('utf8')
     } catch (error) {
-      diagnostics.push({ severity: 'error', file: name, id, message: `读取失败，条目已跳过：${String(error)}` })
+      diagnostics.push({ severity: 'error', file: name, id, message: `Read failed; entry skipped: ${String(error)}` })
       owner.delete(id)
       failedFileIds.add(id)
       continue
@@ -407,7 +407,7 @@ export async function loadRoster(options: LoadRosterOptions): Promise<RosterView
       const { entry, enabled } = parseEntryDocument(parseYaml(stripBom(text)))
       entries[id] = { entry, enabled, source: 'file', file: name }
     } catch (error) {
-      diagnostics.push({ severity: 'error', file: name, id, message: `解析或校验失败，条目已跳过：${String(error)}` })
+      diagnostics.push({ severity: 'error', file: name, id, message: `Parse or validation failed; entry skipped: ${String(error)}` })
       failedFileIds.add(id)
     }
   }
@@ -421,7 +421,7 @@ export async function loadRoster(options: LoadRosterOptions): Promise<RosterView
       diagnostics.push({
         severity: 'info',
         id,
-        message: `settings 中的旧条目已被名册文件 "${file.file}" 覆盖（旧条目可从 settings.yaml 删除）`,
+        message: `Legacy entry in settings is shadowed by roster file "${file.file}" (the legacy entry can be deleted from settings.yaml)`,
       })
       continue
     }
@@ -432,7 +432,7 @@ export async function loadRoster(options: LoadRosterOptions): Promise<RosterView
       diagnostics.push({
         severity: 'error',
         id,
-        message: `名册文件损坏，当前由 settings 旧副本兜底——delegate 使用的是旧配置；修复或删除该文件后恢复文件优先`,
+        message: `Roster file is corrupt; falling back to the legacy settings copy — delegate uses the old config; fix or delete the file to restore file precedence`,
       })
     }
     entries[id] = { entry, enabled: true, source: 'legacy' }
@@ -485,7 +485,7 @@ export async function migrateLegacyEntries(options: {
       names.add(`${id}.yaml`)
       imported.push(id)
     } catch (error) {
-      diagnostics.push({ severity: 'error', id, message: `迁移写入失败：${String(error)}` })
+      diagnostics.push({ severity: 'error', id, message: `Migration write failed: ${String(error)}` })
     }
   }
   return { imported, skipped, diagnostics }

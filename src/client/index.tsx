@@ -1,7 +1,7 @@
 /**
  * dsh-subagent-library — browser half.
  *
- * A Settings section card ("子代理库") that reads and edits the
+ * A Settings section card ("Subagent Library") that reads and edits the
  * `subagent-library` settings namespace through the plugin's own host routes
  * (`/subagent-library/api`). The standard `api.settings.*` wire face cannot
  * serve a third-party namespace in this harness build (the gateway only
@@ -74,18 +74,18 @@ export type LibraryWriteResult =
 
 /** Host error codes that carry no `message`; map them to user-facing text. */
 const ERROR_TEXT: Record<string, string> = {
-  'not-ready': '设置服务尚未就绪，请稍后重试。',
-  'readonly': '设置服务只读，无法完成该操作。',
-  'content-type-json-required': '请求被拒绝：写入只接受 JSON。',
-  'cross-origin-forbidden': '请求被拒绝：跨源写入。',
-  'body-too-large': '请求体超过 1 MiB 上限。',
-  'bad-json': '请求体不是合法 JSON。',
-  'entries-object-required': '缺少 entries 对象。',
-  'invalid-id': '条目 ID 非法。',
-  'unknown-op': '未知操作。',
-  'roster-unreadable': '名册目录读取失败。',
-  'write-failed': '名册文件写入失败。',
-  'profile-path': '当前 profile 名称不能保存独立模型路由。',
+  'not-ready': 'Settings service not ready yet; try again shortly.',
+  'readonly': 'Settings service is read-only; cannot complete the operation.',
+  'content-type-json-required': 'Request rejected: writes accept JSON only.',
+  'cross-origin-forbidden': 'Request rejected: cross-origin write.',
+  'body-too-large': 'Request body exceeds the 1 MiB limit.',
+  'bad-json': 'Request body is not valid JSON.',
+  'entries-object-required': 'Missing the entries object.',
+  'invalid-id': 'Invalid entry ID.',
+  'unknown-op': 'Unknown operation.',
+  'roster-unreadable': 'Failed to read the roster directory.',
+  'write-failed': 'Failed to write the roster file.',
+  'profile-path': 'The current profile name cannot store an independent model route.',
 }
 
 interface WireView {
@@ -124,7 +124,7 @@ async function readView(): Promise<LibraryView> {
     // A diagnostic `message` (e.g. settings-seam registration failure) wins
     // over the generic per-code text.
     const message = (body as WireView | null)?.message
-    throw new Error(message ?? (error !== undefined ? ERROR_TEXT[error] : undefined) ?? '子代理库接口不可用（插件未加载？）')
+    throw new Error(message ?? (error !== undefined ? ERROR_TEXT[error] : undefined) ?? 'Subagent library API unavailable (plugin not loaded?)')
   }
   return parseView(body as WireView)
 }
@@ -145,7 +145,7 @@ async function writeView(write: LibraryWrite): Promise<LibraryWriteResult> {
       return { ok: false, conflict: true, view: wire.view !== undefined ? parseView(wire.view) : undefined }
     }
     if (!response.ok || wire.ok !== true) {
-      return { ok: false, message: wire.message ?? (wire.error !== undefined ? ERROR_TEXT[wire.error] : undefined) ?? '保存失败' }
+      return { ok: false, message: wire.message ?? (wire.error !== undefined ? ERROR_TEXT[wire.error] : undefined) ?? 'Save failed' }
     }
     return { ok: true, view: parseView(wire) }
   } catch (error) {
@@ -185,7 +185,7 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section',
     id: NS,
     order: 40,
-    label: () => '子代理库',
+    label: () => 'Subagent Library',
     inject: (): LibrarySettingsInjected => ({ readView, writeView, subscribeRefresh }),
   }, LibrarySettings))
 

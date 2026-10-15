@@ -96,7 +96,7 @@ test('delegate drops toolFilter names the calling session cannot restrict', asyn
   )) as Record<string, unknown>
 
   // `subagent` is invisible here → reported as "does not exist in this session".
-  assert.match(String((result['droppedTools'] as string[])[0]), /^subagent（本会话不存在）/)
+  assert.match(String((result['droppedTools'] as string[])[0]), /^subagent \(does not exist in this session\)/)
   assert.equal(host.subagentStarts.length, 1)
   assert.deepEqual(host.subagentStarts[0]?.request['toolFilter'], { deny: ['write'] })
   // The scope passed to tools.view() is the AGENT object, never its Context
@@ -122,7 +122,7 @@ test('delegate drops scope-local names that are visible but not restrictable', a
     EXEC,
   )) as Record<string, unknown>
 
-  assert.match(String((result['droppedTools'] as string[])[0]), /^subagent（本会话专属工具/)
+  assert.match(String((result['droppedTools'] as string[])[0]), /^subagent \(session-local tool/)
   assert.deepEqual(host.subagentStarts[0]?.request['toolFilter'], { deny: ['write'] })
 })
 
@@ -177,7 +177,7 @@ test('delegate result render carries the ignored-name note', async () => {
   const delegate = tool(host, 'delegate')
   const result = (await delegate.execute({ library_id: 'reviewer', prompt: 'x' }, EXEC)) as Record<string, unknown>
   const rendered = delegate.output?.render?.({}, result) ?? []
-  assert.match(rendered.map((block) => block.text).join(''), /已忽略本会话不可用的工具名：ghost-tool（本会话不存在）/)
+  assert.match(rendered.map((block) => block.text).join(''), /\(ignored tool names unavailable in this session: ghost-tool \(does not exist in this session\)\)/)
 })
 
 test('list_subagents summarizes the SANITIZED filter for the calling session', async () => {
@@ -189,7 +189,7 @@ test('list_subagents summarizes the SANITIZED filter for the calling session', a
     },
   })
   const rows = (await tool(host, 'list_subagents').execute({}, EXEC)) as Array<Record<string, unknown>>
-  assert.equal(rows[0]?.['toolFilter'], 'deny:[write] 忽略:[subagent]')
+  assert.equal(rows[0]?.['toolFilter'], 'deny:[write] ignored:[subagent]')
 })
 
 test('delegate omits the filter when every toolFilter name is unknown here', async () => {
@@ -205,17 +205,17 @@ test('delegate omits the filter when every toolFilter name is unknown here', asy
     EXEC,
   )) as Record<string, unknown>
 
-  assert.match(String((result['droppedTools'] as string[])[0]), /^ghost-tool（本会话不存在）/)
+  assert.match(String((result['droppedTools'] as string[])[0]), /^ghost-tool \(does not exist in this session\)/)
   assert.equal(host.subagentStarts.length, 1)
   assert.equal(Object.hasOwn(host.subagentStarts[0]?.request ?? {}, 'toolFilter'), false)
 })
 
 test('both tools throw the settingsFailure diagnostic when registration failed', async () => {
   const host = makeHost({ failRegister: true, baseEntries: { reader: { description: 'fake' } } })
-  await assert.rejects(() => tool(host, 'list_subagents').execute({}, EXEC), /注册失败/)
+  await assert.rejects(() => tool(host, 'list_subagents').execute({}, EXEC), /Failed to register/)
   await assert.rejects(
     () => tool(host, 'delegate').execute({ library_id: 'reader', prompt: 'x' }, EXEC),
-    /注册失败/,
+    /Failed to register/,
   )
 })
 
@@ -308,7 +308,7 @@ test('a transiently failed migration retries on the next roster read (A5)', asyn
   const first = (await tool(host, 'list_subagents').execute({}, EXEC)) as Array<Record<string, unknown>>
   assert.equal(host.fs.files()['/roster/retry.yaml'], undefined, 'first attempt failed')
   const diag = first.find((row) => row['diagnostics'] !== undefined) as Record<string, unknown> | undefined
-  assert.ok(diag !== undefined && JSON.stringify(diag).includes('自动重试'), 'the failure must be visible and promise a retry')
+  assert.ok(diag !== undefined && JSON.stringify(diag).includes('retries automatically'), 'the failure must be visible and promise a retry')
 
   ;(host.fs as { writeFile: (path: string, data: string) => Promise<void> }).writeFile = originalWrite
   await tool(host, 'list_subagents').execute({}, EXEC)

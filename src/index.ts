@@ -317,7 +317,7 @@ export function apply(ctx: Context, config: Config) {
           isWritable: () => svc.writable !== false,
         }
       } catch (error) {
-        settingsFailure = `subagent-library 设置段注册失败：${String(error)}。请检查存储的 subagent-library 配置段（常见：description 缺失、entries 写成数组、YAML 布尔/字符串误写）。`
+        settingsFailure = `Failed to register the subagent-library settings section: ${String(error)}. Check the stored subagent-library section (common: missing description, entries written as an array, YAML boolean/string typos).`
       }
       return
     }
@@ -484,10 +484,10 @@ export function apply(ctx: Context, config: Config) {
       } else {
         // Per-entry write failures must ALSO retry (same strand-until-0.4
         // trap as a thrown error) — do not latch on a partial migration.
-        migrationFailure = `${result.diagnostics.map((item) => item.message).join('；')}（修复后将自动重试）`
+        migrationFailure = `${result.diagnostics.map((item) => item.message).join('; ')} (retries automatically after a fix)`
       }
     } catch (error) {
-      migrationFailure = `${String(error)}——下次使用名册时自动重试；重启 dsh web 亦可立即重试`
+      migrationFailure = `${String(error)} — retries automatically on the next roster use; restarting dsh web also retries immediately`
     }
   }
   /** Fresh roster view for every consumer (tools, command, settings API):
@@ -499,7 +499,7 @@ export function apply(ctx: Context, config: Config) {
     await ensureMigrated()
     const view = await loadRoster({ dir: resolveEntriesDir(cfg.entriesDir), legacy: cfg.entries, fs: fsPort() })
     if (migrationFailure !== undefined) {
-      view.diagnostics.unshift({ severity: 'warning', message: `旧条目自动迁移未完成：${migrationFailure}` })
+      view.diagnostics.unshift({ severity: 'warning', message: `Automatic legacy migration incomplete: ${migrationFailure}` })
     }
     return { subagentProvider: cfg.subagentProvider, view }
   }
@@ -573,7 +573,7 @@ export function apply(ctx: Context, config: Config) {
     if (state.kind === 'unsafe') {
       diagnostics.unshift({
         severity: 'error',
-        message: `${state.reason}。本 profile 不会把模型路由写进共享名册；未注册的共享 provider 仍不会被调用。`,
+        message: `${state.reason}. This profile will not write model routes into the shared roster; unregistered shared providers still will not be called.`,
       })
     } else {
       await deleteOrphanOverlays(lib.view.dir, lib.view.listing, lib.view.presentIds, fsPort())
@@ -594,7 +594,7 @@ export function apply(ctx: Context, config: Config) {
           diagnostics.push({
             severity: 'warning',
             id,
-            message: `profile "${state.name}" 的路由覆盖已失效（共享名册路由已变），已忽略。`,
+            message: `The route overlay for profile "${state.name}" is stale (the shared roster route changed); ignored.`,
           })
         } else {
           overlay = read.overlay
@@ -733,7 +733,7 @@ export function apply(ctx: Context, config: Config) {
     return Object.entries(lib.ignoredProviders).map(([id, provider]) => ({
       severity: 'warning' as const,
       id,
-      message: `共享名册路由 provider "${provider}" 未在当前 profile "${lib.profile}" 注册，调用将改用本会话模型。在此填写的 Provider/模型只保存到这个 profile。`,
+      message: `Shared-roster route provider "${provider}" is not registered in the current profile "${lib.profile}"; calls fall back to the session model. A Provider/model set here is saved to this profile only.`,
     }))
   }
   const wireView = async (
@@ -747,7 +747,7 @@ export function apply(ctx: Context, config: Config) {
     const diagnostics = [
       ...opWarnings,
       ...(legacySkipWarning
-        ? [{ severity: 'warning' as const, message: '设置服务只读：settings 中的旧副本未能同步移除，被删条目可能以旧副本复活' }]
+        ? [{ severity: 'warning' as const, message: 'Settings service is read-only: legacy copies in settings could not be removed; deleted entries may resurrect from the legacy copy' }]
         : []),
       ...profileRouteWarnings(lib),
       ...lib.view.diagnostics,
@@ -846,7 +846,7 @@ export function apply(ctx: Context, config: Config) {
             if (settings !== undefined && !settings.isWritable()) {
               // A silent 200 here would be a false success (A7): the user
               // believes the rollback copies are gone when they are not.
-              sendJson(res, 403, { ok: false, error: 'readonly', message: '设置服务只读，无法清除旧副本' })
+              sendJson(res, 403, { ok: false, error: 'readonly', message: 'Settings service is read-only; cannot clear legacy copies' })
               return
             }
             await unsetLegacy(legacyShadowedIds(current))
@@ -888,7 +888,7 @@ export function apply(ctx: Context, config: Config) {
               try {
                 validated.set(id, parseEntryDocument(payload))
               } catch (error) {
-                sendJson(res, 400, { ok: false, error: 'rejected', message: `条目 "${id}"：${String(error)}` })
+                sendJson(res, 400, { ok: false, error: 'rejected', message: `Entry "${id}": ${String(error)}` })
                 return
               }
             }
@@ -915,7 +915,7 @@ export function apply(ctx: Context, config: Config) {
                   sendJson(res, 400, {
                     ok: false,
                     error: 'profile-path',
-                    message: `${profileState.reason}。不能把本 profile 的模型路由写进共享名册。`,
+                    message: `${profileState.reason}. This profile's model route cannot be written into the shared roster.`,
                   })
                   return
                 }
@@ -939,7 +939,7 @@ export function apply(ctx: Context, config: Config) {
                 try {
                   await removeYmlSibling(current.dir, id, fsPort())
                 } catch (error) {
-                  sweepWarnings.push(`条目 "${id}" 的同名 .yml 残留清除失败，冲突诊断会持续到清除成功：${String(error)}`)
+                  sweepWarnings.push(`Failed to remove the leftover same-id .yml for entry "${id}"; the conflict diagnostic persists until removal succeeds: ${String(error)}`)
                 }
               } else {
                 await writeEntryFile({
@@ -1032,13 +1032,13 @@ export function apply(ctx: Context, config: Config) {
         if (agent === undefined) return declared
         const { filter, dropped } = sanitizeToolFilter(ctx, entry.toolFilter, agent)
         const effective = filter === undefined
-          ? '(本会话无可应用的名单项)'
+          ? '(no library entries applicable to this session)'
           : [
               filter.allow !== undefined ? `allow:[${filter.allow.join(', ')}]` : '',
               filter.deny !== undefined ? `deny:[${filter.deny.join(', ')}]` : '',
             ].filter(Boolean).join(' ')
         return dropped.length > 0
-          ? `${effective} 忽略:[${dropped.map((item) => item.name).join(', ')}]`
+          ? `${effective} ignored:[${dropped.map((item) => item.name).join(', ')}]`
           : effective
       }
       /** Row shape mirrors the tool's declared output schema (JsonValue-safe:
@@ -1131,12 +1131,12 @@ export function apply(ctx: Context, config: Config) {
               ? outputValueText(value.output ?? [])
               : JSON.stringify(value)
         const routeNote = typeof value.routeNote === 'string' && value.routeNote !== ''
-          ? `\n（${value.routeNote}）`
+          ? `\n(${value.routeNote})`
           : ''
         return [{
           type: 'text',
           text: text + routeNote + (dropped.length > 0
-            ? `\n（已忽略本会话不可用的工具名：${dropped.join('；')}）`
+            ? `\n(ignored tool names unavailable in this session: ${dropped.join('; ')})`
             : ''),
         }]
       },
@@ -1197,8 +1197,8 @@ export function apply(ctx: Context, config: Config) {
       // `ctx[kScope]`), never the agent's Context. See sanitizeToolFilter.
       const { filter: toolFilter, dropped, allowEmptied } = sanitizeToolFilter(ctx, entry.toolFilter, parent)
       const droppedTools = dropped.map((item) => item.reason === 'session-local'
-        ? `${item.name}（本会话专属工具，子代本就继承不到）`
-        : `${item.name}（本会话不存在）`)
+        ? `${item.name} (session-local tool the child could not inherit anyway)`
+        : `${item.name} (does not exist in this session)`)
       if (allowEmptied) {
         throw new Error(`delegate: entry "${args.library_id}" allow list names no tool this session can apply (${droppedTools.join('; ')}) — refusing to start a child with no tools at all`)
       }
@@ -1328,21 +1328,21 @@ export function apply(ctx: Context, config: Config) {
           const row = view.entries[id]
           const note = lib.notes[id]
           const tags = [
-            `${row.entry.provider ?? '默认模型路由'}/${row.entry.model ?? '默认模型'}`,
-            note === 'foreign-ignored' || note === 'inherit' ? '本 profile 会话模型' : '',
+            `${row.entry.provider ?? 'default route'}/${row.entry.model ?? 'default model'}`,
+            note === 'foreign-ignored' || note === 'inherit' ? 'session model (this profile)' : '',
             note === 'profile' ? `profile:${lib.profile}` : '',
-            row.entry.backgroundMode === 'continuable' ? '可续聊' : '',
+            row.entry.backgroundMode === 'continuable' ? 'Continuable' : '',
             row.source === 'legacy' ? 'legacy' : '',
-            row.enabled ? '' : '已停用',
-          ].filter(Boolean).join('，')
+            row.enabled ? '' : 'disabled',
+          ].filter(Boolean).join(', ')
           return `- ${id}: ${row.entry.description} [${tags}]`
         })
         const diagnosticLines = view.diagnostics
           .filter((item) => item.severity !== 'info')
           .map((item) => `  ! ${item.severity}${item.id !== undefined ? ` [${item.id}]` : ''}: ${item.message}`)
         const text = ids.length === 0 && view.diagnostics.length === 0
-          ? `子代理库为空。在名册目录放置 <id>.yaml 文件（默认 ~/.dsh/subagents/，可用 subagent-library.entriesDir 配置），或在设置页添加。`
-          : `子代理库（${ids.length} 个，目录 ${view.dir}）：\n` + [...lines, ...diagnosticLines].join('\n')
+          ? `The subagent library is empty. Place <id>.yaml files in the roster directory (default ~/.dsh/subagents/, configurable via subagent-library.entriesDir), or add one on the settings page.`
+          : `Subagent Library (${ids.length}, dir ${view.dir}):\n` + [...lines, ...diagnosticLines].join('\n')
         return { kind: 'success', text }
       },
     })

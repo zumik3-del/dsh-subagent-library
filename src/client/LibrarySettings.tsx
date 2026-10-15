@@ -165,7 +165,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
           else delete next[touchedId]
           return next
         })
-        setStatus({ kind: 'ok', text: '已保存' })
+        setStatus({ kind: 'ok', text: 'Saved' })
         // A push skipped while the write was in flight may have carried an
         // external change; reload to pick it up.
         if (skipped) load()
@@ -183,10 +183,10 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
         } else {
           load()
         }
-        setStatus({ kind: 'error', text: '名册已被其他窗口或外部修改（已切换到最新基线）。你的未保存修改已保留；再次保存将以你的版本覆盖。' })
+        setStatus({ kind: 'error', text: 'The roster was changed by another window or externally (switched to the latest baseline). Your unsaved changes are kept; saving again overwrites with your version.' })
       } else {
         if (skipped) load()
-        setStatus({ kind: 'error', text: result.message ?? '保存失败' })
+        setStatus({ kind: 'error', text: result.message ?? 'Save failed' })
       }
       return false
     } finally {
@@ -227,17 +227,17 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
 
   const updateEntry = (id: string, entry: StoredEntry): void => {
     if ((entry.description ?? '').trim() === '') {
-      setStatus({ kind: 'error', text: '描述不能为空。' })
+      setStatus({ kind: 'error', text: 'Description must not be empty.' })
       setOpen((current) => ({ ...current, [id]: true }))
       return
     }
     if (entry.maxDepth !== undefined && (!Number.isInteger(entry.maxDepth) || entry.maxDepth < 1)) {
-      setStatus({ kind: 'error', text: '深度上限需为 ≥1 的整数。' })
+      setStatus({ kind: 'error', text: 'Max depth must be an integer ≥ 1.' })
       setOpen((current) => ({ ...current, [id]: true }))
       return
     }
     if (entry.maxTokens !== undefined && (!Number.isInteger(entry.maxTokens) || entry.maxTokens < 1)) {
-      setStatus({ kind: 'error', text: '输出上限需为 ≥1 的整数。' })
+      setStatus({ kind: 'error', text: 'Max output must be an integer ≥ 1.' })
       setOpen((current) => ({ ...current, [id]: true }))
       return
     }
@@ -247,27 +247,27 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
   }
 
   const removeEntry = (id: string): void => {
-    if (!window.confirm(`确认删除子代理 "${id}"？该操作立即删除其名册文件。`)) return
+    if (!window.confirm(`Delete subagent "${id}"? This immediately deletes its roster file.`)) return
     void applyWrite({ op: 'delete', id, expectedHash: view?.hash }, id)
   }
 
   const addEntry = (): void => {
     const id = newId.trim()
     if (!/^[a-z0-9][a-z0-9-]*$/.test(id) || (newEntry.description ?? '').trim() === '') {
-      setStatus({ kind: 'error', text: 'ID 需为小写字母/数字/连字符，且必须有描述。' })
+      setStatus({ kind: 'error', text: 'ID must be lowercase letters/digits/hyphens and a description is required.' })
       return
     }
     const serverEntries = view?.entries ?? {}
     if (serverEntries[id] !== undefined) {
-      setStatus({ kind: 'error', text: `ID "${id}" 已存在。` })
+      setStatus({ kind: 'error', text: `ID "${id}" already exists.` })
       return
     }
     if (newEntry.maxTokens !== undefined && (!Number.isInteger(newEntry.maxTokens) || newEntry.maxTokens < 1)) {
-      setStatus({ kind: 'error', text: '输出上限需为 ≥1 的整数。' })
+      setStatus({ kind: 'error', text: 'Max output must be an integer ≥ 1.' })
       return
     }
     if (newEntry.maxDepth !== undefined && (!Number.isInteger(newEntry.maxDepth) || newEntry.maxDepth < 1)) {
-      setStatus({ kind: 'error', text: '深度上限需为 ≥1 的整数。' })
+      setStatus({ kind: 'error', text: 'Max depth must be an integer ≥ 1.' })
       return
     }
     void applyWrite({ op: 'save', entries: { ...serverEntries, [id]: cleanEntry(newEntry) }, expectedHash: view?.hash }, id).then((ok) => {
@@ -365,13 +365,13 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
       <div className="dsh-library" style={S.root}>
         <style>{SETTINGS_CSS}</style>
         <div style={S.headingRow}>
-          <div style={S.heading}>子代理库</div>
-          <button type="button" onClick={load} style={S.button}>重试</button>
+          <div style={S.heading}>Subagent Library</div>
+          <button type="button" onClick={load} style={S.button}>Retry</button>
         </div>
         {status !== null && (
           <div style={status.kind === 'ok' ? BANNER.ok : BANNER.error}>{status.text}</div>
         )}
-        {status === null && <div style={S.sub}>正在加载…（若长时间无响应，请重试或检查插件是否加载）</div>}
+        {status === null && <div style={S.sub}>Loading… (if it hangs, retry or check whether the plugin loaded)</div>}
       </div>
     )
   }
@@ -381,12 +381,12 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
       <style>{SETTINGS_CSS}</style>
       <div style={S.pageHeader}>
         <div style={S.headingRow}>
-          <h2 style={S.heading}>子代理库</h2>
+          <h2 style={S.heading}>Subagent Library</h2>
           <span style={{ flex: 1 }} />
-          <button type="button" onClick={load} disabled={busy} style={S.button}>刷新</button>
+          <button type="button" onClick={load} disabled={busy} style={S.button}>Refresh</button>
         </div>
         <span style={S.sub}>
-          集中管理角色、模型与执行方式。展开条目编辑，保存后即刻生效。
+          Manage roles, models and execution in one place. Expand an entry to edit; changes apply immediately after saving.
         </span>
       </div>
 
@@ -400,7 +400,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                 opacity: item.severity === 'info' ? 0.78 : 1,
               }}
             >
-              {item.severity === 'error' ? '错误' : item.severity === 'warning' ? '警告' : '提示'}{item.id !== undefined ? ` [${item.id}]` : ''}：{item.message}
+              {item.severity === 'error' ? 'Error' : item.severity === 'warning' ? 'Warning' : 'Info'}{item.id !== undefined ? ` [${item.id}]` : ''}: {item.message}
             </div>
           ))}
         </div>
@@ -408,26 +408,26 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
 
       {view.profile !== undefined && view.profile !== '' && (
         <div style={BANNER.info}>
-          当前 profile：{view.profile}。这里填写的 Provider / 模型只保存到这个 profile，不会改写另一个 profile 的路由。共享名册里的模型若未在这里注册，调用会改用本会话的模型。
+          Current profile: {view.profile}. The Provider / model filled in here is saved to this profile only and never rewrites another profile's route. If a shared-roster model is not registered here, calls fall back to the session model.
         </div>
       )}
 
       {(view.legacyCount ?? 0) > 0 && (
         <div style={BANNER.info}>
           <span>
-            0.2→0.3 迁移：{view.legacyCount} 个旧条目已导出为名册文件并优先生效，settings.yaml 中的旧副本仍在（仅作回滚兜底）。确认名册正常后可一键清除。
+            0.2→0.3 migration: {view.legacyCount} legacy entries were exported to roster files and now take precedence; the old copies remain in settings.yaml (rollback fallback only). Once the roster looks correct you can clear them in one click.
           </span>
           <button
             type="button"
             disabled={busy}
             onClick={() => {
-              if (window.confirm('确认清除 settings.yaml 中已迁移的旧条目副本？（名册文件不受影响）')) {
+              if (window.confirm('Clear the migrated legacy copies in settings.yaml? (roster files are unaffected)')) {
                 void applyWrite({ op: 'clear-legacy', expectedHash: view?.hash }, '')
               }
             }}
             style={{ ...S.button, alignSelf: 'flex-start' }}
           >
-            清除旧条目
+            Clear legacy entries
           </button>
         </div>
       )}
@@ -437,27 +437,27 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
         <div style={S.bandStats}>
           <div style={S.bandStat}>
             <span style={S.bandValue}>{stats.total}</span>
-            <span style={S.bandLabel}>个子代理</span>
+            <span style={S.bandLabel}>subagents</span>
           </div>
           <div style={S.bandStat}>
             <span style={{ ...S.bandValue, color: SUCCESS }}>{stats.total - stats.off}</span>
-            <span style={S.bandLabel}>已启用</span>
+            <span style={S.bandLabel}>enabled</span>
           </div>
           {stats.off > 0 && (
             <div style={S.bandStat}>
               <span style={S.bandValue}>{stats.off}</span>
-              <span style={S.bandLabel}>已停用</span>
+              <span style={S.bandLabel}>disabled</span>
             </div>
           )}
           {dirtyIds.size > 0 && (
             <div style={S.bandStat}>
               <span style={{ ...S.bandValue, color: DANGER }}>{dirtyIds.size}</span>
-              <span style={S.bandLabel}>未保存</span>
+              <span style={S.bandLabel}>unsaved</span>
             </div>
           )}
         </div>
         <div style={S.bandDir}>
-          <span style={S.bandLabel}>名册目录</span>
+          <span style={S.bandLabel}>Roster directory</span>
           <span style={S.bandPath} title={view.dir || '~/.dsh/subagents'}>{view.dir || '~/.dsh/subagents'}</span>
         </div>
       </div>
@@ -472,28 +472,28 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
             <input
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
-              placeholder="筛选 id、描述、模型…"
-              aria-label="筛选子代理"
+              placeholder="Filter id, description, model…"
+              aria-label="Filter subagents"
               style={S.searchInput}
             />
             {filter !== '' && (
               <button
                 type="button"
                 onClick={() => setFilter('')}
-                title="清除筛选"
+                title="Clear filter"
                 style={{ ...S.ghost, padding: 0, fontSize: 13, lineHeight: 1 }}
               >
                 ×
               </button>
             )}
           </label>
-          <button type="button" onClick={toggleAll} disabled={visibleIds.length === 0} style={S.button}>{allOpen ? '全部收起' : '全部展开'}</button>
+          <button type="button" onClick={toggleAll} disabled={visibleIds.length === 0} style={S.button}>{allOpen ? 'Collapse all' : 'Expand all'}</button>
           <button
             type="button"
             onClick={() => setAdding((current) => !current)}
             style={adding ? S.button : S.primary}
           >
-            {adding ? '取消新增' : '＋ 新增子代理'}
+            {adding ? 'Cancel' : '＋ New subagent'}
           </button>
         </div>
       )}
@@ -504,25 +504,25 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
         <div className="dsh-library-card" style={{ ...S.row, ...S.rowOpen }}>
           <div style={S.addHead}>
             <div style={S.addIntro}>
-              <span style={{ ...S.id, color: ACCENT }}>新增子代理</span>
-              <span style={S.sub}>填写 ID 与角色描述，其余配置可稍后补充。</span>
+              <span style={{ ...S.id, color: ACCENT }}>New subagent</span>
+              <span style={S.sub}>Fill in an ID and a role description; the rest can be set later.</span>
             </div>
-            <button type="button" disabled={busy} onClick={addEntry} style={S.primary}>创建子代理</button>
+            <button type="button" disabled={busy} onClick={addEntry} style={S.primary}>Create subagent</button>
           </div>
           <div style={S.body}>
             <div className="dsh-library-grid" style={S.grid}>
-              <Field label="ID" hint="小写字母 / 数字 / 连字符">
+              <Field label="ID" hint="lowercase letters / digits / hyphens">
                 <input value={newId} onChange={(event) => setNewId(event.target.value)} placeholder="k3-reviewer" style={S.input} />
               </Field>
-              <Field label="模型" hint="留空随默认路由">
+              <Field label="Model" hint="Empty = default route">
                 <input value={newEntry.model ?? ''} onChange={(event) => setNewEntry({ ...newEntry, model: event.target.value })} placeholder="k3-256k" style={S.input} />
               </Field>
             </div>
-            <Field label="描述（模型可见）">
+            <Field label="Description (visible to the model)">
               <textarea
                 value={newEntry.description ?? ''}
                 onChange={(event) => setNewEntry({ ...newEntry, description: event.target.value })}
-                placeholder="一句话说明这个角色做什么——模型靠它选人"
+                placeholder="One sentence on what this role does — the model picks by it"
                 rows={1}
                 style={{ ...S.prose, overflow: 'auto' }}
               />
@@ -531,10 +531,10 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
               <Field label="Provider">
                 <input value={newEntry.provider ?? ''} onChange={(event) => setNewEntry({ ...newEntry, provider: event.target.value })} placeholder="kimi-coding" style={S.input} />
               </Field>
-              <Field label="传输层">
-                <input value={newEntry.subagentProvider ?? ''} onChange={(event) => setNewEntry({ ...newEntry, subagentProvider: event.target.value })} placeholder="spawn（默认）" style={S.input} />
+              <Field label="Transport">
+                <input value={newEntry.subagentProvider ?? ''} onChange={(event) => setNewEntry({ ...newEntry, subagentProvider: event.target.value })} placeholder="spawn (default)" style={S.input} />
               </Field>
-              <Field label="后台模式">
+              <Field label="Background mode">
                 <select
                   value={newEntry.backgroundMode ?? 'one-shot'}
                   onChange={(event) => setNewEntry({ ...newEntry, backgroundMode: event.target.value as 'one-shot' | 'continuable' })}
@@ -544,7 +544,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                   <option value="continuable">continuable</option>
                 </select>
               </Field>
-              <Field label="深度上限">
+              <Field label="Max depth">
                 <input
                   type="number"
                   min={1}
@@ -553,7 +553,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                   style={S.input}
                 />
               </Field>
-              <Field label="输出上限">
+              <Field label="Max output">
                 <input
                   type="number"
                   min={1}
@@ -565,15 +565,15 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
               </Field>
             </div>
             <div className="dsh-library-grid" style={S.grid}>
-              <Field label="思考强度">
+              <Field label="Reasoning effort">
                 <input
                   value={newEntry.reasoningEffort ?? ''}
                   onChange={(event) => setNewEntry({ ...newEntry, reasoningEffort: event.target.value === '' ? undefined : event.target.value.trim() })}
-                  placeholder="max / high / medium / low（留空随父会话默认）"
+                  placeholder="max / high / medium / low (empty = parent session default)"
                   style={S.input}
                 />
               </Field>
-              <Field label="禁用工具" hint="英文逗号分隔；写入时只增删 deny，不触碰手写的 allow">
+              <Field label="Denied tools" hint="Comma-separated; writes only add/remove deny and never touch a hand-written allow">
                 <input
                   value={listToText(newEntry.toolFilter?.deny)}
                   onChange={(event) => {
@@ -592,11 +592,11 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                 />
               </Field>
             </div>
-            <Field label="角色提示词（可选）">
+            <Field label="Persona (optional)">
               <AutoTextarea
                 value={newEntry.persona ?? ''}
                 onChange={(event) => setNewEntry({ ...newEntry, persona: event.target.value })}
-                placeholder="子代理的系统提示词"
+                placeholder="System prompt for the subagent"
                 style={S.prose}
               />
             </Field>
@@ -606,20 +606,20 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
 
       {stats.total === 0 && (
         <div style={S.empty}>
-          库为空。在上方填一个 id 与描述即可创建第一个条目，
+          The library is empty. Fill in an id and a description above to create the first entry, 
           <br />
-          或直接在名册目录放一个 <code>&lt;id&gt;.yaml</code>。
+          or drop a <code>&lt;id&gt;.yaml</code>.
         </div>
       )}
 
       {stats.total > 0 && visibleIds.length === 0 && (
-        <div style={S.empty}>没有匹配「{filter}」的条目。</div>
+        <div style={S.empty}>No entries match '{filter}'.</div>
       )}
 
       {visibleIds.length > 0 && (
         <div style={S.listCaption}>
-          <span>{needle === '' ? '角色名册' : `匹配 ${visibleIds.length} / ${stats.total} 个子代理`}</span>
-          <span>点击名称展开配置</span>
+          <span>{needle === '' ? 'Role roster' : `matching ${visibleIds.length} / ${stats.total} subagents`}</span>
+          <span>Click a name to expand settings</span>
         </div>
       )}
 
@@ -633,7 +633,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
           const provider = entry.provider || ''
           const route = provider !== '' && model !== ''
             ? `${provider}/${model}`
-            : model !== '' ? model : provider !== '' ? provider : '默认路由'
+            : model !== '' ? model : provider !== '' ? provider : 'default route'
           return (
             <div key={id} className="dsh-library-card" data-entry-id={id} style={{ ...S.row, ...(isOpen ? S.rowOpen : null), ...(off ? S.rowOff : null) }}>
               <div style={S.head}>
@@ -643,73 +643,73 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                   style={S.disclosure}
                   aria-expanded={isOpen}
                   aria-controls={`${sectionId}-${id}`}
-                  aria-label={`${isOpen ? '收起' : '展开'} ${id} 的配置`}
+                  aria-label={`${isOpen ? 'Collapse' : 'Expand'} settings for ${id}`}
                   data-row-id={id}
                   onClick={() => setOpen((current) => ({ ...current, [id]: !isOpen }))}
                 >
                   <Chevron open={isOpen} />
                   <span style={S.titleRow}>
                     <span style={S.id}>{id}</span>
-                    {entry.source === 'legacy' && <span style={S.chip}>旧版条目</span>}
-                    {dirty && <span style={S.dirtyChip}>未保存</span>}
+                    {entry.source === 'legacy' && <span style={S.chip}>Legacy entries</span>}
+                    {dirty && <span style={S.dirtyChip}>unsaved</span>}
                   </span>
                 </button>
                 <label
                   style={S.headToggle}
-                  title="切换后需保存此条目才会生效"
+                  title="Save this entry for the toggle to take effect"
                 >
                   <input
                     className="dsh-library-switch"
                     type="checkbox"
                     role="switch"
-                    aria-label={`启用 ${id}`}
+                    aria-label={`Enable ${id}`}
                     checked={!off}
                     onChange={(event) => patch(id, { enabled: event.target.checked ? undefined : false })}
                   />
-                  <span>{off ? '已停用' : '已启用'}</span>
+                  <span>{off ? 'disabled' : 'enabled'}</span>
                 </label>
               </div>
 
               <div style={S.overview}>
                 <p style={S.excerpt} title={entry.description ?? ''}>
-                  {entry.description || '暂无角色描述'}
+                  {entry.description || 'No role description'}
                 </p>
-                <div style={S.route} title={`路由：${route}`}>
-                  <span style={S.metaLabel}>模型</span>
-                  <span style={S.model}>{model || '跟随默认模型'}</span>
+                <div style={S.route} title={`Route: ${route}`}>
+                  <span style={S.metaLabel}>Model</span>
+                  <span style={S.model}>{model || 'Follow the default model'}</span>
                   {provider !== '' && <span style={S.provider}>{provider}</span>}
                 </div>
                 <div style={S.glyphs}>
                   <span style={entry.backgroundMode === 'continuable' ? S.modeChip : S.glyph}>
-                    {entry.backgroundMode === 'continuable' ? '可续聊' : '单次任务'}
+                    {entry.backgroundMode === 'continuable' ? 'Continuable' : 'One-shot'}
                   </span>
-                  {entry.reasoningEffort && <span style={S.glyph}>思考 <span style={S.metaValue}>{entry.reasoningEffort}</span></span>}
-                  {entry.maxDepth !== undefined && <span style={S.glyph}>深度 <span style={S.metaValue}>{entry.maxDepth}</span></span>}
-                  {entry.maxTokens !== undefined && <span style={S.glyph}>输出 <span style={S.metaValue}>{entry.maxTokens.toLocaleString('en-US')}</span> tokens</span>}
-                  {entry.persona && <span style={S.glyph}>角色提示词</span>}
-                  {(entry.toolFilter?.deny?.length ?? 0) > 0 && <span style={S.glyph}>禁用 {entry.toolFilter!.deny!.length} 项工具</span>}
-                  {(entry.toolFilter?.allow?.length ?? 0) > 0 && <span style={S.glyph}>允许 {entry.toolFilter!.allow!.length} 项工具</span>}
+                  {entry.reasoningEffort && <span style={S.glyph}>Reasoning <span style={S.metaValue}>{entry.reasoningEffort}</span></span>}
+                  {entry.maxDepth !== undefined && <span style={S.glyph}>Depth <span style={S.metaValue}>{entry.maxDepth}</span></span>}
+                  {entry.maxTokens !== undefined && <span style={S.glyph}>Output <span style={S.metaValue}>{entry.maxTokens.toLocaleString('en-US')}</span> tokens</span>}
+                  {entry.persona && <span style={S.glyph}>Persona</span>}
+                  {(entry.toolFilter?.deny?.length ?? 0) > 0 && <span style={S.glyph}>Deny {entry.toolFilter!.deny!.length} tools</span>}
+                  {(entry.toolFilter?.allow?.length ?? 0) > 0 && <span style={S.glyph}>Allow {entry.toolFilter!.allow!.length} tools</span>}
                 </div>
               </div>
 
               {dirty && !isOpen && (
                 <div style={S.draftActions}>
-                  <span style={S.hint}>保存后生效</span>
+                  <span style={S.hint}>Save to apply</span>
                   <span style={S.spacer} />
-                  <button type="button" disabled={busy} onClick={(event) => { focusDisclosure(event); revertEntry(id) }} style={S.ghost}>还原</button>
-                  <button type="button" disabled={busy} onClick={(event) => { focusDisclosure(event); updateEntry(id, entry) }} style={S.primary}>保存修改</button>
+                  <button type="button" disabled={busy} onClick={(event) => { focusDisclosure(event); revertEntry(id) }} style={S.ghost}>Revert</button>
+                  <button type="button" disabled={busy} onClick={(event) => { focusDisclosure(event); updateEntry(id, entry) }} style={S.primary}>Save changes</button>
                 </div>
               )}
 
               <div id={`${sectionId}-${id}`} hidden={!isOpen}>
                 {isOpen && <div style={S.body}>
                   <div style={S.group}>
-                    <span style={S.groupTitle}>概述</span>
-                    <Field label="描述（模型可见）" hint="模型用 list_subagents 读到的就是这句话，写清角色与适用场景">
+                    <span style={S.groupTitle}>Overview</span>
+                    <Field label="Description (visible to the model)" hint="This exact text is what list_subagents shows the model — state the role and when to use it">
                       <textarea
                         value={entry.description ?? ''}
                         onChange={(event) => patch(id, { description: event.target.value })}
-                        placeholder="角色描述"
+                        placeholder="Role description"
                         rows={1}
                         style={{ ...S.prose, overflow: 'auto' }}
                       />
@@ -717,29 +717,29 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                   </div>
 
                   <div style={S.group}>
-                    <span style={S.groupTitle}>路由与执行</span>
+                    <span style={S.groupTitle}>Routing & execution</span>
                     <div className="dsh-library-grid" style={S.grid}>
                       <Field
                         label="Provider"
                         hint={entry.routeNote === 'foreign-ignored'
-                          ? '共享名册里的路由当前 profile 没有，调用会改用本会话模型。留空保存不会改掉共享路由。'
+                          ? 'The shared-roster route is missing in the current profile; calls fall back to the session model. Saving empty will not change the shared route.'
                           : entry.routeNote === 'profile'
-                            ? `只保存在 profile ${view.profile ?? ''}`
+                            ? `Saved to profile ${view.profile ?? ''} only`
                             : entry.routeNote === 'inherit'
-                              ? '本 profile 固定使用会话模型，不跟随共享名册路由'
+                              ? 'This profile always uses the session model and ignores the shared-roster route'
                               : entry.routeNote === 'profile-missing'
-                                ? '这个 profile 保存的 Provider 未注册'
+                                ? 'The Provider saved for this profile is not registered'
                                 : undefined}
                       >
                         <input value={entry.provider ?? ''} onChange={(event) => patch(id, { provider: event.target.value })} placeholder="deepseek-official / kimi-coding" style={S.input} />
                       </Field>
-                      <Field label="模型">
+                      <Field label="Model">
                         <input value={entry.model ?? ''} onChange={(event) => patch(id, { model: event.target.value })} placeholder="k3-256k" style={S.input} />
                       </Field>
-                      <Field label="传输层" hint="留空用 spawn">
-                        <input value={entry.subagentProvider ?? ''} onChange={(event) => patch(id, { subagentProvider: event.target.value })} placeholder="spawn（默认）" style={S.input} />
+                      <Field label="Transport" hint="Empty = spawn">
+                        <input value={entry.subagentProvider ?? ''} onChange={(event) => patch(id, { subagentProvider: event.target.value })} placeholder="spawn (default)" style={S.input} />
                       </Field>
-                      <Field label="后台模式">
+                      <Field label="Background mode">
                         <select
                           value={entry.backgroundMode ?? 'one-shot'}
                           onChange={(event) => patch(id, { backgroundMode: event.target.value as 'one-shot' | 'continuable' })}
@@ -751,7 +751,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                       </Field>
                     </div>
                     <div className="dsh-library-grid" style={S.grid}>
-                      <Field label="思考强度" hint="留空随父会话默认">
+                      <Field label="Reasoning effort" hint="Empty = parent session default">
                         <input
                           value={entry.reasoningEffort ?? ''}
                           onChange={(event) => patch(id, { reasoningEffort: event.target.value === '' ? undefined : event.target.value.trim() })}
@@ -759,7 +759,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                           style={S.input}
                         />
                       </Field>
-                      <Field label="深度上限">
+                      <Field label="Max depth">
                         <input
                           type="number"
                           min={1}
@@ -768,7 +768,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                           style={S.input}
                         />
                       </Field>
-                      <Field label="输出上限">
+                      <Field label="Max output">
                         <input
                           type="number"
                           min={1}
@@ -782,8 +782,8 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                   </div>
 
                   <div style={S.group}>
-                    <span style={S.groupTitle}>工具与提示词</span>
-                    <Field label="禁用工具" hint="英文逗号分隔；留空表示不限制。手写的 allow 列表会原样保留">
+                    <span style={S.groupTitle}>Tools & prompt</span>
+                    <Field label="Denied tools" hint="Comma-separated; empty means no restriction. A hand-written allow list is kept as-is">
                       <input
                         value={listToText(entry.toolFilter?.deny)}
                         onChange={(event) => setDeny(id, event.target.value)}
@@ -791,11 +791,11 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                         style={S.input}
                       />
                     </Field>
-                    <Field label="角色提示词（可选）">
+                    <Field label="Persona (optional)">
                       <AutoTextarea
                         value={entry.persona ?? ''}
                         onChange={(event) => patch(id, { persona: event.target.value })}
-                        placeholder="子代理的系统提示词"
+                        placeholder="System prompt for the subagent"
                         style={S.prose}
                       />
                     </Field>
@@ -803,17 +803,17 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
 
                   <div style={S.actions}>
                     {dirty
-                      ? <span style={{ ...S.hint, color: DANGER }}>此条目有未保存修改</span>
-                      : <span style={S.hint}>{entry.source === 'legacy' ? '来自 settings.yaml 的迁移副本' : '与名册文件一致'}</span>}
+                      ? <span style={{ ...S.hint, color: DANGER }}>This entry has unsaved changes</span>
+                      : <span style={S.hint}>{entry.source === 'legacy' ? 'Migrated copy from settings.yaml' : 'In sync with the roster file'}</span>}
                     <span style={S.spacer} />
                     <button
                       type="button"
                       disabled={busy || !dirty}
                       onClick={() => revertEntry(id)}
                       style={{ ...S.ghost, opacity: busy || !dirty ? 0.45 : 1 }}
-                      title="丢弃本行的未保存修改，恢复为服务器当前值"
+                      title="Discard this row's unsaved changes and restore the server value"
                     >
-                      还原
+                      Revert
                     </button>
                     <button
                       type="button"
@@ -821,7 +821,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                       onClick={() => removeEntry(id)}
                       style={{ ...S.danger, opacity: busy ? 0.55 : 1 }}
                     >
-                      删除
+                      Delete
                     </button>
                     <button
                       type="button"
@@ -829,7 +829,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                       onClick={() => updateEntry(id, entry)}
                       style={{ ...S.primary, opacity: busy || !dirty ? 0.5 : 1 }}
                     >
-                      保存
+                      Save
                     </button>
                   </div>
                 </div>}
@@ -846,11 +846,11 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
       )}
 
       <details style={S.footer}>
-        <summary style={S.footerSummary}>存储与备份说明</summary>
+        <summary style={S.footerSummary}>Storage & backup notes</summary>
         <div style={S.hint}>
-        配置存储于名册目录 <code style={{ fontFamily: MONO }}>{view.dir || '~/.dsh/subagents'}</code>（每具名子代理一个 <code>&lt;id&gt;.yaml</code>，可手编、热生效；<code>_</code> 前缀的文件/目录为非名册内容，如 <code>_backups/</code> 备份区）。
-        让 agent 修改条目前，建议先把原文件复制到 <code>_backups/</code> 里。
-        settings.yaml 中的旧 entries 仅作迁移兜底读取，文件优先生效。
+        Config lives in the roster directory <code style={{ fontFamily: MONO }}>{view.dir || '~/.dsh/subagents'}</code> (one per named subagent, <code>&lt;id&gt;.yaml</code> — hand-editable and hot-reloaded; <code>_</code>-prefixed files/dirs are non-roster content, e.g. <code>_backups/</code> backup area).
+        Before letting an agent edit entries, copy the originals to <code>_backups/</code>.
+        The legacy entries in settings.yaml are read only as a migration fallback; files take precedence.
         </div>
       </details>
     </div>

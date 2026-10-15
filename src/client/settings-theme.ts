@@ -172,10 +172,10 @@ export const SETTINGS_CSS = `
 .dsh-library :is(button, input, textarea, select, summary):focus-visible {
   outline: 2px solid ${TOKEN.accent}; outline-offset: 3px;
 }
-.dsh-library label:has(input[aria-label="筛选子代理"]):focus-within {
+.dsh-library label:has(input[aria-label="Filter subagents"]):focus-within {
   outline: 2px solid ${TOKEN.accent}; outline-offset: 2px;
 }
-.dsh-library input[aria-label="筛选子代理"]:focus-visible { outline: none; }
+.dsh-library input[aria-label="Filter subagents"]:focus-visible { outline: none; }
 .dsh-library select option { background: ${TOKEN.surface}; color: ${TOKEN.primary}; }
 .dsh-library-switch {
   appearance: none; position: relative; display: inline-block; flex: none;

@@ -71,7 +71,7 @@ test('GET surfaces the settingsFailure diagnostic as 503 + message', async () =>
   assert.equal(res.status, 503)
   const body = jsonBody(res)
   assert.equal(body['error'], 'not-ready')
-  assert.match(String(body['message']), /注册失败/)
+  assert.match(String(body['message']), /Failed to register/)
 })
 
 test('POST rejects a non-JSON content type (415)', async () => {
@@ -277,7 +277,7 @@ test('readonly settings no longer block roster writes; legacy-only deletes just 
 })
 
 test('clean no-legacy host: deleting an unknown id is a no-op success (004 gate)', async () => {
-  // Platform gate: "从干净无 legacy 启动验证 no-op 删除" — verify a
+  // Platform gate: "no-op delete verified from a clean no-legacy start" — verify a
   // successful response with no phantom entry and no legacy rows reported.
   const host = makeHost({ settingsShape: 'forms', formsRawOmitsDefaults: true, baseEntries: {} })
   const before = jsonBody(await dispatch(host.web, API_PATH))
@@ -372,7 +372,7 @@ test('SettingsForms host: read-only settings skips legacy unset with a warning d
   assert.equal(res.status, 200)
   const body = jsonBody(res)
   const diagnostics = (body['diagnostics'] ?? []) as Array<{ severity: string, message: string }>
-  assert.ok(diagnostics.some((item) => item.severity === 'warning' && /旧副本/.test(item.message)), 'the resurrection risk must be surfaced')
+  assert.ok(diagnostics.some((item) => item.severity === 'warning' && /legacy copies/.test(item.message)), 'the resurrection risk must be surfaced')
   // Under read-only settings the legacy copy survives and LEGITIMATELY keeps
   // serving — that is exactly what the warning diagnostic declares.
   assert.equal((body['entries'] as Record<string, unknown>)['doomed'] !== undefined, true)
@@ -388,7 +388,7 @@ test('.yml row with identical content still converges on save (no skip-deadlock)
   assert.equal(host.fs.files()['/roster/reader.yml'], undefined, 'the .yml must be converged away')
   assert.match(String(host.fs.files()['/roster/reader.yaml']), /description: original file/)
   const diagnostics = (jsonBody(res)['diagnostics'] ?? []) as Array<{ message: string }>
-  assert.ok(!diagnostics.some((item) => /相同 id/.test(item.message)))
+  assert.ok(!diagnostics.some((item) => /Resolves to the same id/.test(item.message)))
 })
 
 // ── SUB-COMPAT-017-002: sweep failures are surfaced, never swallowed ────────
@@ -437,7 +437,7 @@ test('after the fault clears, the next identical save converges via the skip pat
   assert.equal(res.status, 200)
   assert.equal(host.fs.files()['/roster/stuck.yml'], undefined)
   const diagnostics = (jsonBody(res)['diagnostics'] ?? []) as Array<{ message: string }>
-  assert.ok(!diagnostics.some((item) => /残留清除失败/.test(item.message)))
+  assert.ok(!diagnostics.some((item) => /Failed to remove the leftover same-id/.test(item.message)))
 })
 
 test('a skip-path sweep failure surfaces as a warning while the save itself succeeds', async () => {
@@ -451,7 +451,7 @@ test('a skip-path sweep failure surfaces as a warning while the save itself succ
   const res = await postJson(host.web, { op: 'save', entries: { stuck: { description: 'same' } } })
   assert.equal(res.status, 200)
   const diagnostics = (jsonBody(res)['diagnostics'] ?? []) as Array<{ severity: string, message: string }>
-  assert.ok(diagnostics.some((item) => item.severity === 'warning' && /残留清除失败/.test(item.message)), 'must not be silent')
+  assert.ok(diagnostics.some((item) => item.severity === 'warning' && /Failed to remove the leftover same-id/.test(item.message)), 'must not be silent')
   assert.equal(host.fs.files()['/roster/stuck.yml'] !== undefined, true)
   lock.release()
 })
@@ -508,7 +508,7 @@ test('editing a .yml entry converges to a single .yaml; delete then sticks', asy
   assert.equal(host.fs.files()['/roster/reader.yml'], undefined, 'the .yml sibling must be converged away')
   assert.match(String(host.fs.files()['/roster/reader.yaml']), /description: updated/)
   const diagnostics = (jsonBody(res)['diagnostics'] ?? []) as Array<{ message: string }>
-  assert.ok(!diagnostics.some((item) => /相同 id/.test(item.message)), 'no duplicate-id conflict may appear')
+  assert.ok(!diagnostics.some((item) => /Resolves to the same id/.test(item.message)), 'no duplicate-id conflict may appear')
   const del = await postJson(host.web, { op: 'delete', id: 'reader' })
   assert.equal(del.status, 200)
   assert.deepEqual(Object.keys(jsonBody(del)['entries'] as Record<string, unknown>), [])
@@ -525,7 +525,7 @@ test('.yml file coexisting with a legacy copy: save converges and keeps one file
   assert.equal(host.fs.files()['/roster/reader.yml'], undefined)
   assert.match(String(host.fs.files()['/roster/reader.yaml']), /description: edited/)
   const diagnostics = (jsonBody(res)['diagnostics'] ?? []) as Array<{ message: string }>
-  assert.ok(!diagnostics.some((item) => /相同 id/.test(item.message)))
+  assert.ok(!diagnostics.some((item) => /Resolves to the same id/.test(item.message)))
 })
 
 test('POST rejects an unknown op (400 unknown-op)', async () => {

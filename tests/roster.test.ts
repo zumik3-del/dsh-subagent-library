@@ -65,9 +65,9 @@ test('parseEntryDocument validates, rejects unknown keys, and applies schema def
   assert.equal(defaulted.enabled, true)
   assert.equal((defaulted.entry as Entry & { backgroundMode?: string }).backgroundMode ?? 'one-shot', 'one-shot')
 
-  assert.throws(() => parseEntryDocument({ typo_field: 'x' }), /未知字段/)
+  assert.throws(() => parseEntryDocument({ typo_field: 'x' }), /Unknown fields/)
   assert.throws(() => parseEntryDocument({ description: 'x', enabled: 'yes' }), /enabled/)
-  assert.throws(() => parseEntryDocument('nope'), /对象/)
+  assert.throws(() => parseEntryDocument('nope'), /must be an object/)
   assert.throws(() => parseEntryDocument({}), /description/)
   // reasoningEffort must look like an adapter effort id, not prose (A4).
   assert.throws(() => parseEntryDocument({ description: 'x', reasoningEffort: '最大 力度' }), /reasoningEffort/)
@@ -137,9 +137,9 @@ test('loadRoster escalates broken-file + legacy overlap to a loud error (A2)', a
   const fs = makeMemFs({ '/roster/broken.yaml': 'description: [oops\n' })
   const view = await loadRoster({ dir: '/roster', legacy: { broken: { description: 'old copy' } }, fs })
   assert.equal(view.entries['broken']?.source, 'legacy')
-  const escalated = view.diagnostics.find((item) => item.severity === 'error' && /兜底/.test(item.message))
+  const escalated = view.diagnostics.find((item) => item.severity === 'error' && /falling back to the legacy settings copy/.test(item.message))
   assert.ok(escalated !== undefined, 'the fallback must be escalated to its own loud error')
-  assert.match(escalated?.message ?? '', /旧配置/)
+  assert.match(escalated?.message ?? '', /the old config/)
 })
 
 test('loadRoster strips only the file SUFFIX, not inner .yaml substrings', async () => {
@@ -164,11 +164,11 @@ test('loadRoster reads files sorted, skips broken ones with diagnostics', async 
   assert.equal(view.entries['a-worker']?.file, 'a-worker.yaml')
   const byFile = new Map(view.diagnostics.map((item) => [item.file, item]))
   assert.equal(byFile.get('broken.yaml')?.severity, 'error')
-  assert.match(byFile.get('broken.yaml')?.message ?? '', /解析或校验失败/)
+  assert.match(byFile.get('broken.yaml')?.message ?? '', /Parse or validation failed/)
   assert.equal(byFile.get('unknown.yaml')?.severity, 'error')
   assert.match(byFile.get('unknown.yaml')?.message ?? '', /nope/)
   assert.equal(byFile.get('Foo.yaml')?.severity, 'warning')
-  assert.match(byFile.get('Foo.yaml')?.message ?? '', /小写/)
+  assert.match(byFile.get('Foo.yaml')?.message ?? '', /all lowercase/)
   assert.ok(!view.diagnostics.some((item) => item.file === 'notes.md'))
 })
 
@@ -179,7 +179,7 @@ test('loadRoster: duplicate ids across .yaml/.yml keep one winner with a loud lo
   })
   const view = await loadRoster({ dir: '/roster', fs })
   assert.equal(view.entries['dup']?.entry.description, 'winner')
-  assert.match(view.diagnostics[0]?.message ?? '', /相同 id/)
+  assert.match(view.diagnostics[0]?.message ?? '', /Resolves to the same id/)
 })
 
 test('loadRoster tolerates a missing directory and merges legacy entries beneath files', async () => {
