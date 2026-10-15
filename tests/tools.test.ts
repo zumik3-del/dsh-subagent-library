@@ -424,6 +424,8 @@ test('delegate keys a background activation job by SESSION ID and settles it', a
   assert.equal(host.jobStarts[0]?.kind, 'subagent')
   assert.equal(host.jobStarts[0]?.owner, 'parent-session')
   const job = host.jobStarts[0]?.run()
-  assert.deepEqual(await job?.done, { status: 'completed', output: 'fake child reply' })
+  // 0.2.1's registry reads `outcome.result` (and hands it to the model once);
+  // `output` is the pre-0.2.1 key. Both must carry the child's report.
+  assert.deepEqual(await job?.done, { status: 'completed', output: 'fake child reply', result: 'fake child reply' })
   assert.equal(host.subagentActivations[0]?.delivery, 'caller')
 })

@@ -172,19 +172,26 @@ function activationSeam(service: unknown): ActivationSeam | undefined {
     : undefined
 }
 
-/** Terminal job outcome (the dsh-jobs `JobOutcome` shape) plus the legacy
- *  `output` key the pre-0.2.1 registry carried the child's final text in. */
+/** Terminal job outcome. The dsh-jobs `JobOutcome` carried the child's final
+ *  text in `output` before 0.2.1 and carries it in `result` from 0.2.1 on
+ *  (`dsh-jobs-local` stores `job.result = outcome.result` and hands it out once).
+ *  Both keys are emitted so either registry generation surfaces the report; an
+ *  unknown extra key is ignored. */
 interface ChildOutcome {
   status: string
   detail?: string
   output?: string
+  result?: string
 }
 
 /** Terminal child outcome as the jobs registry spells it. Mirrors the harness'
  *  own stop-reason mapping (`aborted` ⇒ killed, everything else ⇒ failed). */
 function runOutcome(result: SubagentResult): ChildOutcome {
   switch (result.stopReason as string) {
-    case 'completed': return { status: 'completed', output: outputValueText(result.output as unknown as JsonValue[]) }
+    case 'completed': {
+      const text = outputValueText(result.output as unknown as JsonValue[])
+      return { status: 'completed', output: text, result: text }
+    }
     case 'aborted': return { status: 'killed' }
     default: return { status: 'failed', detail: String(result.stopReason) }
   }

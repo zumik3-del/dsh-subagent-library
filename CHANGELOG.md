@@ -2,6 +2,12 @@
 
 This file documents user-facing changes. Format loosely follows [Keep a Changelog]; versions follow [SemVer].
 
+## [0.3.6] — 2026-10-15
+
+### Fixed
+
+- **A background one-shot delegation no longer loses the child's report on DSH ≥0.2.1.** The jobs registry carried a job's final text in `output` before 0.2.1 and carries it in `result` from 0.2.1 on (`dsh-jobs-local` stores `job.result = outcome.result` and hands it to the model once); the plugin only ever sent `output`, so the job settled as `completed` with nothing to show. The terminal outcome now carries both keys — an unknown extra key is ignored — so either host generation surfaces the child's report. The continuable path (which notifies the parent through the activation's `delivery: 'parent'`) and the foreground path (which returns the output directly) were unaffected.
+
 ## [0.3.5] — 2026-10-15
 
 ### Fixed
