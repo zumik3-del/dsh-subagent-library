@@ -45,6 +45,21 @@ Never commit with a red step 2–4, and never leave `lib/` out of sync with `src
 - `origin` = `github.com/zumik3-del/dsh-subagent-library` (this fork); upstream is `MaRi23333/dsh-subagent-library`. Do not fetch, rebase, or force-push without an explicit request.
 - Never run `git commit`/`push`/`tag` yourself — that is the `git` subagent's job (global §Git operations). Releases publish to npm via [.github/workflows/publish.yml](.github/workflows/publish.yml) on a published release.
 
+### Plugin lifecycle (local source → installed plugin)
+
+The repo is the source of the plugin that dsh itself runs from the git spec, so source changes do nothing until the profile copy is re-resolved. The loop is fixed and always interactive at one point:
+
+1. Edit `src/`, rebuild `lib/` and verify (§3) — a `lib/`-only or `src`-only change is not done.
+2. Push to `origin/main` (git role).
+3. **Ask the user whether to update the plugin in dsh** and wait for an explicit yes. Never update the installed copy on your own initiative.
+4. On yes: `dsh plugin --profile web update dsh-subagent-library`; a plain `pnpm install` reuses the pinned commit and pulls nothing.
+5. Verify the profile copy matches the pushed artifacts (`sha256sum` on `lib/index.js` and `lib/client.js` against the installed `node_modules/dsh-subagent-library/lib/`), and remind the user to hard-refresh the GUI (client bundle is cached).
+6. Print the restart command and stop. **Never restart dsh yourself** — the restart kills this session; the user runs it:
+
+   ```sh
+   sudo systemctl restart dsh.service
+   ```
+
 ## 7. Memory conventions
 
 - SynaptoMind is cwd-scoped: always pass `cwd` for this repo and search before creating.
