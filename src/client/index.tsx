@@ -29,6 +29,9 @@ export interface StoredEntry {
   maxTokens?: number
   persona?: string
   toolFilter?: { allow?: string[]; deny?: string[] }
+  /** DSH ≥0.2.1: the child composes from this Agent Preset (persona/toolFilter
+   *  are ignored there without it). Wire-only like the rest of the entry. */
+  agentPreset?: string
   maxDepth?: number
   backgroundMode?: 'one-shot' | 'continuable'
   /** Present only when the entry is disabled (`enabled: false`). */

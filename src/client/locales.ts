@@ -28,6 +28,7 @@ export type SubagentLibraryKey =
   | 'settings.model'
   | 'settings.persona'
   | 'settings.toolFilter'
+  | 'settings.agentPreset'
   | 'settings.maxDepth'
   | 'settings.background'
   | 'settings.provider'
@@ -50,6 +51,7 @@ export const zh: Record<SubagentLibraryKey, string> = {
   'settings.model': 'Model',
   'settings.persona': 'Persona',
   'settings.toolFilter': 'Denied tools',
+  'settings.agentPreset': 'Agent preset',
   'settings.maxDepth': 'Max depth',
   'settings.background': 'Background mode',
   'settings.provider': 'Provider',
@@ -73,6 +75,7 @@ export const en: Record<SubagentLibraryKey, string> = {
   'settings.model': 'Model',
   'settings.persona': 'Persona',
   'settings.toolFilter': 'Denied tools',
+  'settings.agentPreset': 'Agent preset',
   'settings.maxDepth': 'Max depth',
   'settings.background': 'Background',
   'settings.provider': 'Provider',

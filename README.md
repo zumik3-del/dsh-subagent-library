@@ -12,7 +12,7 @@
 
 ## Overview
 
-A named subagent roster plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) Web GUI: turn your recurring roles (code review, red team, multimodal understanding…) into a persistent named roster (model + persona + tool filter). Then **just tell the main agent "do this with xxx"** — the model picks and dispatches through two tools by itself:
+A named subagent roster plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) Web GUI: turn your recurring roles (code review, red team, multimodal understanding…) into a persistent named roster (model + persona + tool filter; on DSH ≥0.2.1 a named agent preset can own the child's persona and tools). Then **just tell the main agent "do this with xxx"** — the model picks and dispatches through two tools by itself:
 
 - `list_subagents` — lists roster entries (id / role description / model) so the model can pick a suitable one;
 - `delegate` — dispatches work by `library_id`: foreground wait, background one-shot, or a continuable (resumable) subagent, per the entry's configuration.
@@ -86,9 +86,10 @@ One entry file (`k3-reviewer.yaml`):
 description: Independent read-only review on Kimi K3-256K, with image walkthroughs
 provider: kimi-coding
 model: k3-256k
-persona: |
+agentPreset: k3-reviewer   # DSH ≥0.2.1: the child's persona + tool scope come from this preset
+persona: |                 # DSH ≤0.2.0 path; on DSH ≥0.2.1 the preset owns composition and this is ignored
   You are an independent review agent running on Kimi K3-256K…
-toolFilter:
+toolFilter:                # DSH ≤0.2.0 path; on DSH ≥0.2.1 the preset owns the tool scope and this is ignored
   deny: [write, edit, todo_write, create_goal, update_goal, subagent, subagent_fork, send_message, interrupt_agent, workflow, ralph, list_subagents, delegate]
 maxDepth: 1
 backgroundMode: continuable
@@ -105,8 +106,9 @@ Entry fields:
 | `reasoningEffort` | no | Thinking effort: adapter-owned id (e.g. `max` / `high` / `medium` / `low`); empty follows the parent session default. Rides the official `agentOptions.reasoningEffort` override; when the child model route differs, the harness auto-drops the inherited effort, so unset values never leak across models. Only id-shaped values (alphanumerics and `._-`) are accepted; anything else is rejected on save |
 | `subagentProvider` | no | **Subagent transport** (a `ctx.subagents` provider such as `spawn`); defaults to the plugin-level default `spawn` |
 | `maxTokens` | no | Subagent output cap |
-| `persona` | no | Subagent system prompt. Personas go through strict `{{…}}` template interpolation (same semantics as deployment personas) — an unregistered variable (e.g. `{{user}}`) fails child activation |
-| `toolFilter` | no | `allow`/`deny` tool-name lists (deny write-class tools for read-only roles). **Read-only/restricted roles should also deny `list_subagents`/`delegate`** so children are not taught by the global prompt to re-delegate in a chain. Names are resolved against the **calling session's restrictable set** at delegation (not "visibility"): names that session cannot apply are ignored and annotated with the reason (`does not exist in this session` / `session-local tool the child could not inherit anyway`) in the delegate result and the `list_subagents` catalog — one shared entry never fails a whole delegation because a session lacks a tool. **An `allow` list that no name applies to refuses the delegation** (otherwise "keep only these" would silently become "keep nothing"). Registries without `view()` fall back to visibility, where scope-local names still make delegation fail loudly. Saves are not pre-validated |
+| `persona` | no | Subagent system prompt. Personas go through strict `{{…}}` template interpolation (same semantics as deployment personas) — an unregistered variable (e.g. `{{user}}`) fails child activation. **Honored on DSH ≤0.2.0**; on DSH ≥0.2.1 the child's persona comes from the Agent Preset (`agentPreset`), and a `persona` declared without `agentPreset` is ignored there — `delegate` names the lost fields in its result note and logs a warning |
+| `toolFilter` | no | `allow`/`deny` tool-name lists (deny write-class tools for read-only roles). **Read-only/restricted roles should also deny `list_subagents`/`delegate`** so children are not taught by the global prompt to re-delegate in a chain. Names are resolved against the **calling session's restrictable set** at delegation (not "visibility"): names that session cannot apply are ignored and annotated with the reason (`does not exist in this session` / `session-local tool the child could not inherit anyway`) in the delegate result and the `list_subagents` catalog — one shared entry never fails a whole delegation because a session lacks a tool. **An `allow` list that no name applies to refuses the delegation** (otherwise "keep only these" would silently become "keep nothing"). Registries without `view()` fall back to visibility, where scope-local names still make delegation fail loudly. Saves are not pre-validated. **Honored on DSH ≤0.2.0**; on DSH ≥0.2.1 the child's tool scope comes from the Agent Preset (`agentPreset`), and a `toolFilter` declared without `agentPreset` is ignored there — `delegate` names the lost fields in its result note and logs a warning. On that generation the deny list belongs in the preset: the plugin's tools live on the host plane, so `list_subagents`/`delegate` stay visible in every session regardless of the preset |
+| `agentPreset` | no | **DSH ≥0.2.1 only** — Agent Preset id; the child's persona and tools are composed from the named preset (preset-owned composition replaced the per-child `persona`/`toolFilter` request fields on this generation). Hosts ≤0.2.0 have no presets: `delegate` refuses such an entry with a clear message instead of dropping the field, and it also refuses up front when the transport cannot select a preset independently (no `agentPreset` capability, e.g. a fork-style provider that inherits the parent context). The plugin's own tools register on the host plane, so `list_subagents`/`delegate` stay visible in every session regardless of the preset — a preset cannot remove them. `list_subagents` shows the preset when the entry declares one |
 | `maxDepth` | no | Delegation depth cap; **when unset, defaults to 3 when the transport supports depthLimit** (aligned with the official subagent tool to prevent chained recursive delegation; the harness itself has no global depth cap). Transports without depthLimit stay uncapped |
 | `backgroundMode` | no | `one-shot` (default, omitted in files) / `continuable` (resumable) |
 | `enabled` | no | Write `enabled: false` to disable an entry (it stays visible in the directory and the settings page; `delegate` refuses it); omit or set `true` to enable |
@@ -175,7 +177,7 @@ default**; click its name to open the editor.
   roster.
 - **Expanded**, fields are grouped as Overview (description) / Routing & execution (provider,
   model, transport, background mode, reasoning effort, depth, output cap) / Tools & prompt
-  (denied tools, persona), with Revert / Delete / Save at the bottom. Fields use two columns
+  (denied tools, agent preset, persona), with Revert / Delete / Save at the bottom. Fields use two columns
   in wider panels and one in narrow panels, with host light/dark themes and keyboard support.
 - Toggling enable state creates a draft. The collapsed card exposes an unsaved badge and
   Revert / Save changes; the setting takes effect only after saving. Saving one entry does

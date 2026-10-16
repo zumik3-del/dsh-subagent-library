@@ -2,6 +2,12 @@
 
 This file documents user-facing changes. Format loosely follows [Keep a Changelog]; versions follow [SemVer].
 
+## [0.3.7] — 2026-10-16
+
+### Added
+
+- **New per-entry `agentPreset` field (DSH ≥0.2.1)**: preset-owned subagent composition replaced the per-child `persona`/`toolFilter` request fields on this host generation, so a child's persona and tools now come from the named Agent Preset. `delegate` passes `agentPreset` through only when the entry declares it, refuses it loudly on hosts ≤0.2.0 (which have no presets), and gates it on the transport's `agentPreset` capability before any start so the harness's `UNSUPPORTED_CAPABILITY` is never the first thing the user sees; `list_subagents` surfaces the preset in its catalog. On DSH ≥0.2.1 an entry that declares `persona`/`toolFilter` without `agentPreset` no longer loses them silently — `delegate` lists the ignored fields in its result note and logs a warning once per delegation. The legacy fields stay accepted and keep working unchanged on DSH ≤0.2.0.
+
 ## [0.3.6] — 2026-10-15
 
 ### Fixed
@@ -103,6 +109,7 @@ This file documents user-facing changes. Format loosely follows [Keep a Changelo
 - Fixed the settings-page save 400 (removed save-time tool-name prevalidation; `tools.restrict` at delegation time is authoritative); the new-entry card now carries the missing fields.
 
 [Unreleased]: https://github.com/MaRi23333/dsh-subagent-library/compare/v0.3.0...HEAD
+[0.3.7]: https://github.com/MaRi23333/dsh-subagent-library/compare/v0.3.6...v0.3.7
 [0.3.0]: https://github.com/MaRi23333/dsh-subagent-library/compare/v0.2.8...v0.3.0
 [0.2.8]: https://github.com/MaRi23333/dsh-subagent-library/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/MaRi23333/dsh-subagent-library/compare/v0.2.6...v0.2.7

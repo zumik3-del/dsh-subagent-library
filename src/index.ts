@@ -155,7 +155,7 @@ interface ActivationSeam {
   startActivation(spec: {
     provider: string
     label: string
-    request: Omit<SubagentStartRequest, 'signal'>
+    request: Omit<SubagentStartRequest, 'signal'> & PresetRequest
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<{
@@ -164,6 +164,16 @@ interface ActivationSeam {
     dispose: () => Promise<void>
   }>
 }
+
+/** DSH ≥0.2.1 composes the child from an Agent Preset named by `agentPreset`
+ *  (subagent manager: `{ agentPreset: request.agentPreset }`); the pinned
+ *  0.1.0-rc.6 dev types predate the field, so the plugin carries it as a
+ *  structural extension on the request — the same probe-and-cast posture as
+ *  ActivationSeam above. */
+type PresetRequest = { agentPreset?: string }
+
+/** The start request this plugin builds on both host generations. */
+type DelegateRequest = Omit<SubagentStartRequest, 'signal' | 'outputSchema'> & PresetRequest
 
 /** The activation generation (DSH ≥0.2.1), or undefined on DSH ≤0.2.0. */
 function activationSeam(service: unknown): ActivationSeam | undefined {
@@ -266,6 +276,11 @@ type DelegateResult = {
   droppedTools?: string[]
   /** Set when this profile did not use the shared file's provider/model. */
   routeNote?: string
+  /** Set on DSH ≥0.2.1 when the entry declares persona/toolFilter but no
+   *  agentPreset: the host composes children from the preset alone and would
+   *  silently ignore those fields — one note per ignored field, each pointing
+   *  at the agentPreset escape hatch. */
+  ignoredComposition?: string[]
 }
 
 /** One toolFilter name this session cannot apply, with the reason it cannot. */
@@ -1090,7 +1105,7 @@ export function apply(ctx: Context, config: Config) {
   // ── model-facing tools ─────────────────────────────────────────────────────
   ctx.tools.register(defineTool({
     name: 'list_subagents',
-    description: 'List the named subagents available in the subagent library: each entry shows its id, role description, provider, model, background mode and tool filter (allow/deny scoping — e.g. deny:[write, edit] marks a read-only role). Call this before delegating so you can pick a matching library_id.',
+    description: 'List the named subagents available in the subagent library: each entry shows its id, role description, provider, model, background mode, tool filter (allow/deny scoping — e.g. deny:[write, edit] marks a read-only role) and agent preset (DSH ≥0.2.1 hosts compose the child from the named Agent Preset). Call this before delegating so you can pick a matching library_id.',
     parameters: {},
     output: {
       schema: {
@@ -1104,6 +1119,7 @@ export function apply(ctx: Context, config: Config) {
             model: { type: 'string' },
             backgroundMode: { type: 'string' },
             toolFilter: { type: 'string' },
+            agentPreset: { type: 'string' },
           },
           additionalProperties: true,
         },
@@ -1147,6 +1163,7 @@ export function apply(ctx: Context, config: Config) {
         model?: string
         backgroundMode?: string
         toolFilter?: string
+        agentPreset?: string
         enabled?: boolean
         routeNote?: string
         diagnostics?: string[]
@@ -1162,6 +1179,7 @@ export function apply(ctx: Context, config: Config) {
           backgroundMode: row.entry.backgroundMode ?? 'one-shot',
           ...(row.enabled ? {} : { enabled: false }),
           ...(summary !== undefined ? { toolFilter: summary } : {}),
+          ...(row.entry.agentPreset !== undefined ? { agentPreset: row.entry.agentPreset } : {}),
           ...(routeNote !== undefined ? { routeNote } : {}),
         }
       })
@@ -1220,6 +1238,9 @@ export function apply(ctx: Context, config: Config) {
         const dropped = Array.isArray(value.droppedTools)
           ? value.droppedTools.filter((name): name is string => typeof name === 'string')
           : []
+        const ignoredComposition = Array.isArray(value.ignoredComposition)
+          ? value.ignoredComposition.filter((note): note is string => typeof note === 'string')
+          : []
         const text = value.kind === 'background'
           ? `started background subagent task ${value.jobId}`
           : value.kind === 'continuable'
@@ -1234,6 +1255,8 @@ export function apply(ctx: Context, config: Config) {
           type: 'text',
           text: text + routeNote + (dropped.length > 0
             ? `\n(ignored tool names unavailable in this session: ${dropped.join('; ')})`
+            : '') + (ignoredComposition.length > 0
+            ? `\n(${ignoredComposition.join('; ')})`
             : ''),
         }]
       },
@@ -1276,6 +1299,45 @@ export function apply(ctx: Context, config: Config) {
       // ActivationSeam): resolved once per delegation, after the transport.
       const seam = activationSeam(ctx.subagents)
 
+      // Agent-Preset composition exists only on the activation generation, and
+      // only providers that select a preset INDEPENDENTLY of the parent context
+      // can honor it (the harness refuses `agentPreset` otherwise with
+      // UNSUPPORTED_CAPABILITY — the plugin gates first so that harness error is
+      // never the first thing the user sees). The pinned 0.1.0-rc.6 types
+      // predate both members, so the gate reads them structurally.
+      if (entry.agentPreset !== undefined) {
+        if (seam === undefined) {
+          throw new Error(`delegate: entry "${args.library_id}" declares agentPreset, but this host runs DSH ≤0.2.0, which has no agent presets — remove agentPreset from the entry (persona and toolFilter still work on this host)`)
+        }
+        const presetTransport = transport as unknown as {
+          capabilities: { agentPreset?: boolean }
+          inheritsParentContext?: boolean
+        }
+        if (presetTransport.capabilities.agentPreset !== true || presetTransport.inheritsParentContext === true) {
+          throw new Error(`delegate: transport "${subagentProviderName}" cannot select an independent agent preset (no agentPreset capability, or the provider inherits the parent context) — use a transport that advertises agentPreset, or remove agentPreset from the entry`)
+        }
+      }
+
+      // Silent-loss guard, activation generation only: DSH ≥0.2.1 replaced the
+      // per-child persona/toolFilter request fields with preset-owned
+      // composition, so a child's persona and tools come from the Agent Preset
+      // alone and the two legacy fields are dropped WITHOUT any error (historical
+      // descriptors still restore both on cold resume, which is exactly why the
+      // loss is invisible). Warn — the legacy fields stay accepted for the hosts
+      // that do honor them — and name the escape hatch in the result note.
+      const ignoredComposition = seam !== undefined && entry.agentPreset === undefined
+        ? [
+          ...(entry.persona !== undefined ? ['persona'] : []),
+          ...(entry.toolFilter !== undefined ? ['toolFilter'] : []),
+        ]
+        : undefined
+      if (ignoredComposition !== undefined && ignoredComposition.length > 0) {
+        ctx.logger?.warn(`delegate: entry "${args.library_id}" declares ${ignoredComposition.join(', ')} without agentPreset — DSH ≥0.2.1 ignores these fields (presets own child composition)`)
+      }
+      const compositionNote = ignoredComposition !== undefined && ignoredComposition.length > 0
+        ? ignoredComposition.map((field) => `${field} (ignored on DSH ≥0.2.1: presets own child composition — set agentPreset instead)`)
+        : undefined
+
       const continuable = entry.backgroundMode === 'continuable'
       if (continuable && transport.prepareContinuable === undefined) {
         throw new Error(`delegate: transport "${subagentProviderName}" does not support continuable children`)
@@ -1302,10 +1364,14 @@ export function apply(ctx: Context, config: Config) {
       if (allowEmptied) {
         throw new Error(`delegate: entry "${args.library_id}" allow list names no tool this session can apply (${droppedTools.join('; ')}) — refusing to start a child with no tools at all`)
       }
-      // The one-shot capability flags (depthLimit/persona/toolFilter) describe
-      // ONLY the one-shot `start` path; a continuable child is composed by the
-      // continuation manager itself (persona/toolFilter applied on activation,
-      // gated solely by `prepareContinuable`). Skip them for continuable runs.
+      // These checks gate the fields the plugin SENDS on the legacy `start`
+      // request (depthLimit/persona/toolFilter), so they describe that path only:
+      // a continuable child is composed by the continuation manager, which takes
+      // persona/toolFilter from the same request fields and gates them solely on
+      // `prepareContinuable`. On the activation generation (DSH ≥0.2.1) neither
+      // field exists in a start request at all — the child's composition comes
+      // from `agentPreset` (see the guard above), one-shot and continuable alike —
+      // so nothing here is silently lost by skipping them for continuable runs.
       if (!continuable) {
         if (maxDepth !== undefined && !transport.capabilities.depthLimit) {
           throw new Error(`delegate: transport "${subagentProviderName}" cannot enforce maxDepth (no depthLimit capability)`)
@@ -1341,18 +1407,21 @@ export function apply(ctx: Context, config: Config) {
             ...(entry.maxTokens !== undefined ? { maxTokens: entry.maxTokens } : {}),
           }
         : undefined
-      const request: Omit<SubagentStartRequest, 'signal' | 'outputSchema'> = {
+      const request: DelegateRequest = {
         label: args.description ?? args.library_id,
         prompt: [{ type: 'text' as const, text: args.prompt }],
         parent,
         ...(agentOptions !== undefined ? { agentOptions } : {}),
         ...(entry.persona !== undefined ? { persona: entry.persona } : {}),
         ...(toolFilter !== undefined ? { toolFilter } : {}),
+        // Only ever set when the entry declares it — never as `undefined`.
+        ...(entry.agentPreset !== undefined ? { agentPreset: entry.agentPreset } : {}),
         ...(maxDepth !== undefined ? { maxDepth } : {}),
       }
       const droppedNote = {
         ...(droppedTools.length > 0 ? { droppedTools } : {}),
         ...(routeNote !== undefined && lib.notes[args.library_id] !== 'profile' ? { routeNote } : {}),
+        ...(compositionNote !== undefined ? { ignoredComposition: compositionNote } : {}),
       }
 
       const runInBackground = args.run_in_background === true || continuable

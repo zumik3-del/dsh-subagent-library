@@ -239,6 +239,19 @@ export interface HostOptions extends SettingsOptions {
   /** Subagent transport providers the fake registry knows (default: none). */
   subagentProviders?: string[]
   /**
+   * Extra capability flags merged into EVERY fake provider. The default set is
+   * the pre-0.2.1 one (`depthLimit`/`persona`/`toolFilter`) only, so the
+   * agentPreset gate refuses unless a test opts in — mirroring a transport
+   * that cannot select an independent preset.
+   */
+  providerCapabilities?: { agentPreset?: boolean }
+  /**
+   * Advertise `inheritsParentContext` on every fake provider (the fork-in-process
+   * posture: the provider composes the child from the parent context, so an
+   * independent agentPreset is impossible). Omitted keeps the property absent.
+   */
+  inheritsParentContext?: boolean
+  /**
    * Which subagent service generation the fake host exposes.
    * `legacy` (default): DSH ≤0.2.0 — `start` / `startContinuable`.
    * `activation`: DSH ≥0.2.1 — `startActivation` ONLY, so a plugin still calling
@@ -246,7 +259,14 @@ export interface HostOptions extends SettingsOptions {
    */
   subagentsShape?: 'legacy' | 'activation'
   /** Terminal result the fake activation seam resolves with. */
-  activationResult?: { stopReason: string; output: Array<{ type: string; text: string }> }
+  activationResult?: { stopReason: string, output: Array<{ type: string, text: string }> }
+  /**
+   * Install a `ctx.logger` double recording every `warn(...)` call into
+   * `host.warnings` (the composition-loss guard's diagnostic). Off by default —
+   * hosts without it behave exactly as before (the plugin's call is
+   * optional-chained).
+   */
+  captureWarnings?: boolean
   /** Current profile name (`ctx.profileContext.name`). Absent keeps shared routes. */
   profileName?: string
   /** LLM provider ids registered in this profile. Absent means "cannot tell". */
@@ -276,6 +296,12 @@ export interface MockHost {
   toolViewScopes: unknown[]
   /** The in-memory FsPort the plugin was given (assert files written here). */
   fs: MemFs
+  /** Every `ctx.logger.warn(...)` call the plugin made (empty unless the host
+   *  was created with `captureWarnings`). */
+  warnings: string[]
+  /** The declared `output.schema` of every registered tool — the model-facing
+   *  contract the catalog rows must match. */
+  toolOutputSchemas: Record<string, unknown>
   /** DSH ≥0.1.7 SettingsForms double — populated and used when the host is
    *  created with `settingsShape: 'forms'`. */
   forms: MockFormsSettings
@@ -371,6 +397,8 @@ export function makeHost(options: HostOptions = {}): MockHost {
   const subagentActivations: MockHost['subagentActivations'] = []
   const jobStarts: MockHost['jobStarts'] = []
   const toolViewScopes: MockHost['toolViewScopes'] = []
+  const warnings: string[] = []
+  const toolOutputSchemas: Record<string, unknown> = {}
   /** The plugin registers TWO settings injects on ≥0.1.7 (seam +
    *  configEditor binding); the mock must fire ALL of them. */
   const settingsCbs: Array<(sctx: unknown) => void> = []
@@ -384,7 +412,10 @@ export function makeHost(options: HostOptions = {}): MockHost {
 
   const providerNames = options.subagentProviders ?? []
   const providers = new Map(providerNames.map((providerName) => [providerName, {
-    capabilities: { depthLimit: true, persona: true, toolFilter: true },
+    capabilities: { depthLimit: true, persona: true, toolFilter: true, ...options.providerCapabilities },
+    // The harness refuses `agentPreset` on a provider that advertises neither
+    // the capability nor an independent composition — tests opt both in.
+    ...(options.inheritsParentContext !== undefined ? { inheritsParentContext: options.inheritsParentContext } : {}),
     // A local/continuable backend on BOTH generations: DSH ≤0.2.0 gates
     // `startContinuable` on this method, DSH ≥0.2.1 picks local activation with it.
     prepareContinuable: () => Promise.resolve({}),
@@ -458,6 +489,8 @@ export function makeHost(options: HostOptions = {}): MockHost {
     tools: {
       register: (tool: { name: string; execute: (args: never, exec: never) => Promise<unknown> }) => {
         tools.set(tool.name, tool)
+        const schema = (tool as { output?: { schema?: unknown } }).output?.schema
+        if (schema !== undefined) toolOutputSchemas[tool.name] = schema
       },
       // Visible catalog: tests only need "this name is visible / not visible".
       get: (name: string, _scope?: unknown) => (knownTools.has(name) ? { name } : undefined),
@@ -472,6 +505,11 @@ export function makeHost(options: HostOptions = {}): MockHost {
           }),
     },
     systemPrompt: { section: () => {} },
+    // The composition-loss guard warns through ctx.logger; recording (instead
+    // of the production optional-chained no-op) lets tests assert the diagnostic.
+    ...(options.captureWarnings === true
+      ? { logger: { warn: (message: string) => { warnings.push(message) } } }
+      : {}),
     subagents,
     get: (name: string) => {
       if (name === 'profileContext' && options.profileName !== undefined) return { name: options.profileName }
@@ -506,7 +544,7 @@ export function makeHost(options: HostOptions = {}): MockHost {
   for (const cb of settingsCbs) cb(sctxFor)
 
   return {
-    web, tools, settings, forms, applyConfig, subagentStarts, subagentActivations, jobStarts, toolViewScopes, fs,
+    web, tools, settings, forms, applyConfig, subagentStarts, subagentActivations, jobStarts, toolViewScopes, fs, warnings, toolOutputSchemas,
   }
 }
 

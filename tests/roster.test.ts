@@ -97,6 +97,24 @@ test('serializeEntry omits defaults and round-trips through YAML', () => {
   assert.deepEqual(backDisabled.entry, ENTRY)
 })
 
+test('parseEntryDocument accepts agentPreset and the unknown-key error lists it', () => {
+  // Agent Preset child composition (DSH ≥0.2.1): the field is a first-class
+  // roster key, so a typo'd casing must still hit the loud unknown-key error.
+  const parsed = parseEntryDocument({ description: 'x', agentPreset: 'preset-a' })
+  assert.equal(parsed.entry.agentPreset, 'preset-a')
+  assert.throws(
+    () => parseEntryDocument({ description: 'x', agentpreset: 'typo' }),
+    /Unknown fields: agentpreset \(allowed: [^)]*agentPreset[^)]*\)/,
+  )
+})
+
+test('serializeEntry round-trips agentPreset through YAML', () => {
+  const text = serializeEntry({ description: 'x', agentPreset: 'preset-a' }, true)
+  assert.match(text, /agentPreset: preset-a/)
+  const back = parseEntryDocument(parseYaml(text))
+  assert.equal(back.entry.agentPreset, 'preset-a')
+})
+
 test('loadRoster skips `_`-prefixed names silently (backups, drafts)', async () => {
   // readdir lists directories too: `_backups/` sits next to the roster files,
   // and agents may drop `_draft.yaml`-style files — all non-roster content

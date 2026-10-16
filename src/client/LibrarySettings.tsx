@@ -93,7 +93,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [newId, setNewId] = useState('')
-  const [newEntry, setNewEntry] = useState<StoredEntry>({ description: '', provider: '', model: '', backgroundMode: 'one-shot' })
+  const [newEntry, setNewEntry] = useState<StoredEntry>({ description: '', provider: '', model: '', agentPreset: '', backgroundMode: 'one-shot' })
   /** Editing is opt-in; newly created entries open to finish configuration. */
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [adding, setAdding] = useState(false)
@@ -213,6 +213,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
     if (clean.subagentProvider === '') delete clean.subagentProvider
     if (clean.reasoningEffort === '') delete clean.reasoningEffort
     if (clean.persona === '') delete clean.persona
+    if (clean.agentPreset === '') delete clean.agentPreset
     if (clean.description === '') delete clean.description
     if (clean.maxDepth === undefined) delete clean.maxDepth
     if (clean.maxTokens === undefined) delete clean.maxTokens
@@ -273,7 +274,7 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
     void applyWrite({ op: 'save', entries: { ...serverEntries, [id]: cleanEntry(newEntry) }, expectedHash: view?.hash }, id).then((ok) => {
       if (alive.current && ok) {
         setNewId('')
-        setNewEntry({ description: '', provider: '', model: '', backgroundMode: 'one-shot' })
+        setNewEntry({ description: '', provider: '', model: '', agentPreset: '', backgroundMode: 'one-shot' })
         setAdding(false)
         setOpen((current) => ({ ...current, [id]: true }))
       }
@@ -591,6 +592,14 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                   style={S.input}
                 />
               </Field>
+              <Field label="Agent preset" hint="DSH ≥0.2.1: the child's persona and tools come from this preset; empty = ignore">
+                <input
+                  value={newEntry.agentPreset ?? ''}
+                  onChange={(event) => setNewEntry({ ...newEntry, agentPreset: event.target.value === '' ? undefined : event.target.value })}
+                  placeholder="preset id"
+                  style={S.input}
+                />
+              </Field>
             </div>
             <Field label="Persona (optional)">
               <AutoTextarea
@@ -788,6 +797,14 @@ export function LibrarySettings(props: LibrarySettingsProps): React.ReactElement
                         value={listToText(entry.toolFilter?.deny)}
                         onChange={(event) => setDeny(id, event.target.value)}
                         placeholder="write, edit, todo_write, …"
+                        style={S.input}
+                      />
+                    </Field>
+                    <Field label="Agent preset" hint="DSH ≥0.2.1: the child's persona and tools come from this preset — persona and denied tools are ignored without it">
+                      <input
+                        value={entry.agentPreset ?? ''}
+                        onChange={(event) => patch(id, { agentPreset: event.target.value === '' ? undefined : event.target.value })}
+                        placeholder="preset id"
                         style={S.input}
                       />
                     </Field>

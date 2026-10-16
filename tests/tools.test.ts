@@ -429,3 +429,167 @@ test('delegate keys a background activation job by SESSION ID and settles it', a
   assert.deepEqual(await job?.done, { status: 'completed', output: 'fake child reply', result: 'fake child reply' })
   assert.equal(host.subagentActivations[0]?.delivery, 'caller')
 })
+
+/**
+ * Agent-Preset child composition (roster task #1626): DSH ≥0.2.1 composes the
+ * child from a named Agent Preset, so `delegate` must pass `agentPreset`
+ * through the start request (only when declared), gate it on the transport's
+ * ability to select a preset INDEPENDENTLY of the parent context, refuse it on
+ * the legacy generation, and loudly note where the now-ignored persona /
+ * toolFilter fields would otherwise vanish silently.
+ */
+const PRESET_HOST = {
+  subagentProviders: ['spawn'],
+  subagentsShape: 'activation' as const,
+  // spawn-in-process posture: advertises the capability, composes independently.
+  providerCapabilities: { agentPreset: true },
+}
+
+test('delegate passes agentPreset in the start request when the entry declares it', async () => {
+  const host = makeHost({
+    ...PRESET_HOST,
+    baseEntries: { worker: { description: 'fake', agentPreset: 'preset-a' } },
+  })
+  const result = await tool(host, 'delegate').execute({ library_id: 'worker', prompt: 'x' }, EXEC)
+  assert.deepEqual(result, { kind: 'foreground', runId: 'fake-activation-1', output: [{ type: 'text', text: 'fake child reply' }] })
+  const request = host.subagentActivations[0]?.request
+  assert.equal(request?.['agentPreset'], 'preset-a')
+})
+
+test('delegate never sends agentPreset as undefined when the entry omits it', async () => {
+  const host = makeHost({ ...PRESET_HOST, baseEntries: { plain: { description: 'fake' } } })
+  await tool(host, 'delegate').execute({ library_id: 'plain', prompt: 'x' }, EXEC)
+  assert.equal(Object.hasOwn(host.subagentActivations[0]?.request ?? {}, 'agentPreset'), false)
+})
+
+test('delegate refuses agentPreset when the transport lacks the capability', async () => {
+  // The default fake provider advertises no agentPreset capability (and does
+  // not inherit the parent context) — the harness would answer with
+  // UNSUPPORTED_CAPABILITY, so the plugin must gate FIRST and never let that
+  // be the first thing the user sees.
+  const host = makeHost({
+    subagentProviders: ['spawn'],
+    subagentsShape: 'activation',
+    baseEntries: { worker: { description: 'fake', agentPreset: 'preset-a' } },
+  })
+  await assert.rejects(
+    () => tool(host, 'delegate').execute({ library_id: 'worker', prompt: 'x' }, EXEC),
+    /transport "spawn" cannot select an independent agent preset/,
+  )
+  assert.equal(host.subagentActivations.length, 0, 'no child may start')
+})
+
+test('delegate refuses agentPreset when the provider inherits the parent context', async () => {
+  // fork-in-process posture: the capability is advertised, but the provider
+  // composes the child FROM the parent context, so no independent preset exists.
+  const host = makeHost({
+    ...PRESET_HOST,
+    inheritsParentContext: true,
+    baseEntries: { worker: { description: 'fake', agentPreset: 'preset-a' } },
+  })
+  await assert.rejects(
+    () => tool(host, 'delegate').execute({ library_id: 'worker', prompt: 'x' }, EXEC),
+    /transport "spawn" cannot select an independent agent preset/,
+  )
+  assert.equal(host.subagentActivations.length, 0)
+})
+
+test('delegate refuses agentPreset on the legacy generation (DSH ≤0.2.0 has no presets)', async () => {
+  const host = makeHost({
+    subagentProviders: ['spawn'],
+    baseEntries: { worker: { description: 'fake', agentPreset: 'preset-a' } },
+  })
+  await assert.rejects(
+    () => tool(host, 'delegate').execute({ library_id: 'worker', prompt: 'x' }, EXEC),
+    /declares agentPreset, but this host runs DSH ≤0\.2\.0, which has no agent presets/,
+  )
+  assert.equal(host.subagentStarts.length, 0, 'no child may start')
+})
+
+test('delegate warns and notes ignored persona/toolFilter on the activation generation', async () => {
+  // The silent-loss guard: DSH ≥0.2.1 drops the per-child persona/toolFilter
+  // fields WITHOUT any error, so the delegation must surface the loss — a
+  // result note per ignored field plus one logger warning, while the legacy
+  // fields stay accepted and still travel in the request.
+  const host = makeHost({
+    subagentProviders: ['spawn'],
+    subagentsShape: 'activation',
+    knownTools: ['write'],
+    captureWarnings: true,
+    baseEntries: { worker: { description: 'fake', persona: '你是假角色', toolFilter: { deny: ['write'] } } },
+  })
+  const result = (await tool(host, 'delegate').execute({ library_id: 'worker', prompt: 'x' }, EXEC)) as Record<string, unknown>
+  assert.deepEqual(result['ignoredComposition'], [
+    'persona (ignored on DSH ≥0.2.1: presets own child composition — set agentPreset instead)',
+    'toolFilter (ignored on DSH ≥0.2.1: presets own child composition — set agentPreset instead)',
+  ])
+  assert.equal(host.warnings.length, 1, 'exactly one warning per delegation')
+  assert.match(host.warnings[0] ?? '', /entry "worker" declares persona, toolFilter without agentPreset/)
+  assert.equal(host.subagentActivations[0]?.request['persona'], '你是假角色')
+  assert.deepEqual(host.subagentActivations[0]?.request['toolFilter'], { deny: ['write'] })
+})
+
+test('delegate result render carries the ignored-composition note to the model', async () => {
+  const host = makeHost({
+    subagentProviders: ['spawn'],
+    subagentsShape: 'activation',
+    baseEntries: { worker: { description: 'fake', persona: '你是假角色' } },
+  })
+  const delegate = tool(host, 'delegate')
+  const result = (await delegate.execute({ library_id: 'worker', prompt: 'x' }, EXEC)) as Record<string, unknown>
+  const rendered = delegate.output?.render?.({}, result) ?? []
+  assert.match(
+    rendered.map((block) => block.text).join(''),
+    /\(persona \(ignored on DSH ≥0\.2\.1: presets own child composition — set agentPreset instead\)\)/,
+  )
+})
+
+test('delegate stays silent about ignored composition when the entry sets agentPreset', async () => {
+  const host = makeHost({
+    ...PRESET_HOST,
+    knownTools: ['write'],
+    captureWarnings: true,
+    baseEntries: { worker: { description: 'fake', agentPreset: 'preset-a', persona: '你是假角色', toolFilter: { deny: ['write'] } } },
+  })
+  const result = (await tool(host, 'delegate').execute({ library_id: 'worker', prompt: 'x' }, EXEC)) as Record<string, unknown>
+  assert.equal(result['ignoredComposition'], undefined)
+  assert.deepEqual(host.warnings, [])
+  assert.equal(host.subagentActivations[0]?.request['agentPreset'], 'preset-a')
+})
+
+test('delegate never notes ignored composition on the legacy generation (fields still work there)', async () => {
+  const host = makeHost({
+    subagentProviders: ['spawn'],
+    knownTools: ['write'],
+    captureWarnings: true,
+    baseEntries: { worker: { description: 'fake', persona: '你是假角色', toolFilter: { deny: ['write'] } } },
+  })
+  const result = (await tool(host, 'delegate').execute({ library_id: 'worker', prompt: 'x' }, EXEC)) as Record<string, unknown>
+  assert.equal(result['ignoredComposition'], undefined)
+  assert.deepEqual(host.warnings, [])
+  // Legacy fields are sent unchanged on this generation.
+  assert.equal(host.subagentStarts[0]?.request['persona'], '你是假角色')
+  assert.deepEqual(host.subagentStarts[0]?.request['toolFilter'], { deny: ['write'] })
+})
+
+test('list_subagents carries agentPreset in the catalog row only when declared', async () => {
+  const host = makeHost({
+    baseEntries: {
+      worker: { description: 'preset role', agentPreset: 'preset-a' },
+      plain: { description: 'legacy role' },
+    },
+  })
+  const rows = (await tool(host, 'list_subagents').execute({}, EXEC)) as Array<Record<string, unknown>>
+  const worker = rows.find((row) => row['id'] === 'worker')
+  const plain = rows.find((row) => row['id'] === 'plain')
+  assert.equal(worker?.['agentPreset'], 'preset-a')
+  assert.equal(Object.hasOwn(plain ?? {}, 'agentPreset'), false)
+})
+
+test('list_subagents declares agentPreset in the tool output schema', () => {
+  // The model-facing contract: the catalog row may only carry keys the declared
+  // output schema admits.
+  const host = makeHost({ baseEntries: { worker: { description: 'x', agentPreset: 'preset-a' } } })
+  const schema = host.toolOutputSchemas['list_subagents'] as { items: { properties: Record<string, unknown> } }
+  assert.deepEqual(schema.items.properties.agentPreset, { type: 'string' })
+})

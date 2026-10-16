@@ -41,4 +41,11 @@ On the newer host, `settings.yaml.imported` is a migration backup, not a verifie
 
 **New in 0.3** — per-entry `enabled` (disable without deleting) and `reasoningEffort` (adapter-owned thinking-effort id such as `max`, passed through the official `agentOptions` override); broken roster files are skipped with visible diagnostics instead of breaking the roster.
 
+## On DSH ≥0.2.1: persona / toolFilter → agentPreset
+
+DSH 0.2.1-alpha.3 introduced preset-owned subagent composition (upstream notes `.agents/notes/implemented/simplification/2026-10-09-preset-owned-subagent-composition.md` and the guide `docs/upgrade-guide/v0.2.1-alpha.1/subagent-preset-composition/guide.md` in the deepseek-harness repo): new `SubagentStartRequest` values no longer expose `persona`/`toolFilter`, and a child's persona and tools come from the Agent Preset selected through the entry's new `agentPreset` field. Historical child descriptors keep restoring both fields on cold resume, which is why the loss on the new-child path is invisible. No automatic migration is performed, and the legacy fields stay accepted:
+
+- **DSH ≤0.2.0 hosts** — nothing to change: `persona`/`toolFilter` are honored as before, and an entry that sets `agentPreset` is refused there (these hosts have no presets).
+- **DSH ≥0.2.1 hosts** — create an Agent Preset carrying the role's persona and tool scope (see the upstream guide named above), then set `agentPreset: <preset-id>` on the entry. The legacy fields may stay on the entry (they are simply ignored on this generation) or be removed; when `persona`/`toolFilter` are declared without `agentPreset`, `delegate` names the ignored fields in its result note and logs a warning, so the loss is never silent.
+
 See [CHANGELOG.md](./CHANGELOG.md) for the full list of changes.

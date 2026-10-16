@@ -68,6 +68,12 @@ export interface Entry {
   persona?: string
   /** Child tool scoping. */
   toolFilter?: ToolFilter
+  /** Agent Preset id composing the child on DSH ≥0.2.1, where preset-owned
+   *  composition replaced the per-child persona/toolFilter request fields: the
+   *  child's persona and tools then come from the named preset. Hosts
+   *  ≤0.2.0 have no presets — `delegate` refuses the entry there instead of
+   *  silently dropping the field. */
+  agentPreset?: string
   /** Absolute delegation-depth cap for the child; requires provider depthLimit. */
   maxDepth?: number
   /** `one-shot` (default) or `continuable` (durable, resumable background child). */
@@ -86,13 +92,14 @@ export const EntrySchema: z<Entry> = z.object({
     allow: z.array(z.string()).default(undefined as unknown as string[]),
     deny: z.array(z.string()).default(undefined as unknown as string[]),
   }).default(undefined as unknown as { allow: string[]; deny: string[] }),
+  agentPreset: z.string(),
   maxDepth: z.natural().max(Number.MAX_SAFE_INTEGER),
   backgroundMode: z.union(['one-shot', 'continuable'] as const).default('one-shot'),
 })
 
 const ENTRY_KEYS = new Set([
   'description', 'provider', 'model', 'subagentProvider', 'reasoningEffort', 'maxTokens',
-  'persona', 'toolFilter', 'maxDepth', 'backgroundMode',
+  'persona', 'toolFilter', 'agentPreset', 'maxDepth', 'backgroundMode',
 ])
 
 /** Narrow filesystem port so tests never touch the real disk (SUB-TEST-001). */
@@ -243,7 +250,7 @@ function hashEntries(entries: Record<string, RosterEntry>): string {
 export function serializeEntry(entry: Entry, enabled = true): string {
   const record = entry as unknown as Record<string, unknown>
   const doc: Record<string, unknown> = {}
-  for (const key of ['description', 'provider', 'model', 'subagentProvider', 'reasoningEffort', 'maxTokens', 'persona', 'toolFilter', 'maxDepth', 'backgroundMode']) {
+  for (const key of ['description', 'provider', 'model', 'subagentProvider', 'reasoningEffort', 'maxTokens', 'persona', 'toolFilter', 'agentPreset', 'maxDepth', 'backgroundMode']) {
     const value = record[key]
     if (value === undefined) continue
     if (key === 'backgroundMode' && value === 'one-shot') continue
