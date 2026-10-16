@@ -73,4 +73,4 @@ Orchestrator-owned: subagents propose edits via a tracker comment, never by edit
 ## 10. Workspace & communication
 
 - Channel = the ziptask tracker: full English contract in the task description (`get_template("task")` / `("epic")`), outcome in a completion comment; evidence in comments, not files.
-- Non-code artifacts → ai-workdir; handoff → `memory_reflect`. Up to 4 subagents concurrently, `git` sequential at the batch end; mutators share the `main` checkout (§6) — keep concurrent tasks on disjoint files.
+- Non-code documents (plans, ADRs, drafts, docs) → the Forgejo artifacts repository `authelia/artifacts` under `dsh-subagent-library/`, through the `forgejo_artifacts` MCP tools (`project: dsh-subagent-library`); handoff → `memory_reflect` with the artifact permalink. Up to 4 subagents concurrently, `git` sequential at the batch end; mutators share the `main` checkout (§6) — keep concurrent tasks on disjoint files.
